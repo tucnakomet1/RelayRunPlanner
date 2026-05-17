@@ -153,8 +153,6 @@ Za splnění těchto striktních podmínek:
 4.  Běžec smí běžet pouze úseky, které pokrývá jeho auto (v lineárním režimu).
 5.  Úseky jednoho běžce jsou rovnoměrně rozmístěny po celé délce závodu (Spread constraint).
 
----
-
 
 ## Galerie
 
