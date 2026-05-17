@@ -1,7 +1,23 @@
+/*
+ * forms.css – Formulářové prvky a tlačítka
+ *
+ * Styly pro všechny formuláře v aplikaci:
+ *   - .form-group  – wrapper pro label + input
+ *   - input        – textové, číselné, datetime a file inputy
+ *   - .btn         – základní styl tlačítka
+ *   - .btn-primary – hlavní akční tlačítko (plné)
+ *   - .btn-secondary – sekundární tlačítko (s okrajem)
+ *   - .btn-outline – obrysové tlačítko (čárkovaný okraj)
+ *   - .upload-box  – oblast pro nahrání souboru
+ *   - .hint        – nápovědný text pod formulářovým polem
+ */
+
+/* --- Skupina formulářového pole (label + input) --- */
 .form-group {
     margin-bottom: 1.5rem;
 }
 
+/* --- Label --- */
 label {
     display: block;
     margin-bottom: 0.5rem;
@@ -10,6 +26,7 @@ label {
     color: var(--text-muted);
 }
 
+/* --- Textové a číselné inputy --- */
 input[type="text"],
 input[type="number"],
 input[type="datetime-local"],
@@ -24,11 +41,13 @@ input[type="file"] {
     transition: border 0.2s;
 }
 
+/* Zvýraznění okraje při focusu */
 input:focus {
     outline: none;
     border-color: var(--primary);
 }
 
+/* --- Základní styl tlačítka --- */
 .btn {
     padding: 0.75rem 1.5rem;
     border: none;
@@ -44,6 +63,7 @@ input:focus {
     box-sizing: border-box;
 }
 
+/* Hlavní akční tlačítko (plná barva) */
 .btn-primary {
     background: var(--primary);
     color: white;
@@ -55,12 +75,14 @@ input:focus {
     background: var(--primary-hover);
 }
 
+/* Sekundární tlačítko (s okrajem) */
 .btn-secondary {
     background: var(--bg-color);
     color: var(--text-main);
     border: 1px solid var(--border-color);
 }
 
+/* Obrysové tlačítko (čárkovaný okraj) */
 .btn-outline {
     background: transparent;
     color: var(--primary);
@@ -68,6 +90,7 @@ input:focus {
     width: 100%;
 }
 
+/* --- Oblast pro nahrání souboru --- */
 .upload-box {
     background: var(--bg-color);
     padding: 1.5rem;
@@ -76,6 +99,7 @@ input:focus {
     border: 1px dashed var(--border-color);
 }
 
+/* --- Nápovědný text --- */
 .hint {
     font-size: 0.85rem;
     color: var(--text-muted);

@@ -1,90 +1,87 @@
 # 🏃‍♂️ RelayRunPlanner
 
-**RelayRunPlanner** je webová aplikace v Pythonu (Flask) určená pro kompletní správu, matematickou optimalizaci a logistické plánování štafetových závodů (např. *Vltava Run*, *250 km Českým rájem*).
+**RelayRunPlanner** je webová aplikace v Pythonu (Flask) určená pro kompletní správu, matematickou optimalizaci a logistické plánování štafetových závodů (např. *[Vltava Run](https://www.vltavarun.cz/)*, *[JizeRun](https://www.jizerun.cz/)*, *[250 km Českým rájem](https://250cr.cz/)*, apod.).
 
 Aplikace řeší dva hlavní problémy štafetových týmů:
 1. **Spravedlivé rozdělení úseků** mezi běžce pomocí celočíselného lineárního programování (ILP).
 2. **Logistiku a přejezdy aut** – podporuje jak klasickou lineární rotaci, tak pokročilý model **Dynamického kyvadla** pro závody s centrální základnou.
 
----
+## Klíčové vlastnosti
 
-## 🚀 Klíčové vlastnosti
-
-- **Matematická optimalizace (ILP):** Algoritmické rozřazení běžců na úseky na základě jejich preferencí, délky úseků a převýšení s garantovaným minimálním odpočinkem (gap restriction).
+- **Interaktivní UI:** Kompletní webové rozhraní s podporou tmavého/světlého režimu.
+  - nahrání úseků trasy pro závod ve formátu json
+  - rozložení úseků běžců
+  - úseky označené nočními úseky a čelovkami
+  - předpokládaný čas na úsek na základě převýšení a délky úseku
+  - předpokládaný čas doběhu
+- **Matematická optimalizace (ILP):** Algoritmické rozřazení běžců na úseky na základě jejich preferencí, délky úseků a převýšení s garantovaným minimálním odpočinkem.
 - **Detekce nočních úseků:** Automatický výpočet západu a východu slunce pro danou lokalitu (využití knihovny `astral`), který přesně označí úseky běžící se za tmy a čelovky.
 - **Plánování logistiky aut:**
   - *Lineární trasa (např. Vltava Run):* Fixní rotace posádek v bloku po $X$ úsecích.
-  - *Dynamické kyvadlo (např. 250ČR):* Optimalizace pro závody s centrální základnou. Auta se vrací pro odpočinek dříve a kříží své trasy, čímž maximalizují čas na spánek posádky.
-- **Interaktivní UI:** Kompletní webové rozhraní s podporou tmavého/světlého režimu.
+  - *Trasa s centrálou (např. 250ČR):* Optimalizace pro závody s centrální základnou. Auta se vrací pro odpočinek dříve a kříží své trasy, čímž maximalizují čas na spánek posádky.
 
----
+*Poznámka:* Celá logika ILP a logistiky je podrobně popsaná v souboru [docs/relayrun.pdf](docs/relayrun.pdf).
 
-## 🛠️ Architektura logistiky (Ukázka)
-
-### 1. Lineární trasa (Vltava Run)
-Při lineárním závodě se auta točí v pevných blocích. Jakmile jedno auto odjede své úseky, posádka odpočívá a auto se přesouvá na start dalšího velkého bloku.
-
+## Struktura projektu
 
 ```
-
-[Auto 1: Úseky 1-4] ──> [Auto 2: Úseky 5-8] ──> [Auto 3: Úseky 9-12]
-│                                               │
-└────────────────── < ──────────────────────────┘
-(Přesun na Úseky 13-16)
-
+RelayRunPlanner/
+├── app.py                  # Hlavní Flask aplikace (routy + API)
+├── generator.py            # ILP optimalizace přiřazení úseků (PuLP)
+├── logistics.py            # Plánování logistiky aut
+├── requirements.txt        # Python závislosti
+├── race.db                 # SQLite databáze závodů (generuje se automaticky)
+│
+├── templates/
+│   └── index.html          # Jinja2 šablona (HTML + Jinja proměnné)
+│
+├── static/
+│   ├── style.css           # Vstupní bod CSS (importuje ostatní moduly)
+│   ├── theme.css           # CSS proměnné – světlý / tmavý režim
+│   ├── base.css            # Základní layout (body, header, main, karty)
+│   ├── forms.css           # Formulářové prvky a tlačítka
+│   ├── components.css      # UI komponenty (modaly, sidebar, seznam závodů)
+│   ├── segments.css        # Boxy jednotlivých úseků závodu
+│   ├── responsive.css      # Media queries pro mobilní zařízení
+│   ├── img/                # SVG ikony
+│   └── js/
+│       ├── common.js       # Sdílené funkce (motiv, mazání závodu)
+│       ├── setup.js        # Krok 2 – přidávání běžců a formulář
+│       ├── race.js         # Krok 3 – hlavní logika (přepočet časů, polling)
+│       ├── sidebar.js      # Krok 3 – postranní panel běžců
+│       ├── generator.js    # Krok 3 – generování úseků (náhodné + ILP)
+│       └── logistics.js    # Krok 3 – logistika aut
+│
+├── docs/
+│   ├── relayrun.tex        # LaTeX zdrojový kód dokumentace
+│   └── relayrun.pdf        # Zkompilovaná dokumentace (ILP model + logistika)
+│
+├── route/                  # Příklady JSON souborů s trasami závodů
+│   ├── plan_250cr_2026.json
+│   ├── plan_jizerun_2026.json
+│   └── plan_vlatavarun_2026.json
+│
+├── img/                    # Screenshoty z aplikace pro README
+│   ├── main_window.png
+│   ├── logistics_runners.png
+│   └── ILP.png
+│
+└── README.md
 ```
 
-### 2. Dynamické kyvadlo (Závody s centrálou jako 250 km Českým rájem)
-Díky možnosti vracet se na základnu systém počítá s překrýváním. Auto 1 vysadí posádku na trať, a jakmile běžec B předá běžci C, Auto 1 naloží volné lidi (A, B) a ihned odjíždí odpočívat na základnu. Štafetu na trati (předávku z C na D) pak přebírá čerstvé Auto 2 vyslané z centrály.
-
-
-```
-┌───────── Auto 1 (Vezou A, B, C) ────────> [ Start A ]
-│ <──────── Auto 1 (A, B zpět) ─────────── [předávka B ──> C]
-[ ZÁKLADNA ] ───┤
-│ ───────── Auto 2 (Veze D) ──────────────> [předávka C ──> D]
-└─ ─ ─ ─ ─  Auto 2 pokračuje s C a D  ─ ─ > ...
-```
-
----
-
-## 📦 Instalace a spuštění (přes SSH)
+## Instalace a spuštění
 
 Pro naklonování repozitáře a spuštění projektu na lokálním počítači nebo serveru postupujte podle následujících kroků.
 
-### 1. Klonování repozitáře přes SSH
-Uistěte se, že máte na svém GitHub účtu přidaný SSH klíč.
-
 ```bash
-git clone git@github.com:tucnakomet1/RelayRunPlanner.git
+git clone https://github.com/tucnakomet1/RelayRunPlanner.git
 cd RelayRunPlanner
-
-```
-
-### 2. Vytvoření virtuálního prostředí a instalace závislostí
-
-```bash
-# Vytvoření venv
-python3 -m venv venv
-
-# Aktivace venv (Linux/macOS)
-source venv/bin/activate
-
-# Aktivace venv (Windows)
-# .\\venv\\Scripts\\activate
 
 # Instalace potřebných balíčků
 pip install -r requirements.txt
 
-```
-
-*Poznámka: Projekt vyžaduje knihovny `Flask`, `pulp`, `astral` a další.*
-
-### 3. Spuštění aplikace
-
-```bash
+# Spuštění aplikace
 python3 app.py
-
 ```
 
 Aplikace poběží lokálně na adrese: `http://127.0.0.1:5000/`
@@ -95,38 +92,9 @@ Aplikace poběží lokálně na adrese: `http://127.0.0.1:5000/`
 
 Tento projekt je licencován pod [MIT](LICENSE) licencí.
 
-### 1. Krátký popisek repozitáře (Repository Description na GitHubu)
-> Webová aplikace pro matematickou optimalizaci (ILP) rozpisu štafetových běžců a pokročilé plánování logistiky aut (lineární trasy i dynamické kyvadlo s centrální základnou).
-
----
-
-### 2. Postup pro nahrání přes SSH
-Pokud chcete lokální projekt poprvé nahrát do nového repozitáře přes SSH, spusťte v kořenovém adresáři projektu tyto příkazy:
-
-```bash
-# Inicializace gitu (pokud ještě není)
-git init
-
-# Přidání souborů
-git add .
-git commit -m "Initial commit: kompletní aplikace včetně optimalizace a logistiky"
-
-# Nastavení vzdáleného repozitáře přes SSH
-git branch -M main
-git remote add origin git@github.com:tucnakomet1/RelayRunPlanner.git
-
-# Odeslání na GitHub
-git push -u origin main
-
-
----
-
-### 3. Obsah vygenerovaného `README.md`
-
-Soubor, který se vygeneroval do vašeho pracovního prostředí, obsahuje strukturovaný přehled funkcí. Pokud budete chtít do README vložit reálné screenshoty přímo z běžící aplikace, stačí v kořenovém adresáři vytvořit složku `img/`, uložit do ní obrázky (např. `dashboard.png` a `logistika.png`) a do souboru vložit následující markdown odkazy:
 
 ## 📸 Ukázky z aplikace
 
-![Hlavní nástěnka a nastavení závodu](img/dashboard.png)
-![Grafické schéma logistiky a směn](img/logistika.png)
-
+![Hlavní stránka závodu s předpokládanými časy a nočními úseky](img/main_window.png)
+![Logistika a rozpis běžců](img/logistics_runners.png)
+![ILP model ](img/ILP.png)

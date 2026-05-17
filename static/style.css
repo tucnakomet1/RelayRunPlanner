@@ -1,3 +1,18 @@
+/*
+ * style.css – Hlavní vstupní bod CSS pro RelayRunPlanner
+ *
+ * Tento soubor slouží pouze jako agregátor (entry point),
+ * který importuje všechny dílčí CSS moduly v požadovaném pořadí.
+ *
+ * Pořadí importů je důležité:
+ *   1. theme.css    – CSS proměnné pro světlý a tmavý režim
+ *   2. base.css     – Základní layout stránky (body, header, main, karty)
+ *   3. forms.css    – Formulářové prvky (inputy, tlačítka, upload box)
+ *   4. components.css – UI komponenty (modaly, sidebar, seznam závodů, analýza)
+ *   5. segments.css – Boxy jednotlivých úseků závodu
+ *   6. responsive.css – Media queries pro mobilní zařízení
+ */
+
 @import url('theme.css');
 @import url('base.css');
 @import url('forms.css');

@@ -1,35 +1,47 @@
-/* =========================================
-   RESPONSIVITA PRO MOBILNÍ TELEFONY
-   ========================================= */
+/*
+ * responsive.css – Responsivní úpravy pro mobilní zařízení
+ *
+ * Media queries pro šířku obrazovky ≤ 600px (telefony).
+ * Upravuje layout všech hlavních komponent, aby byly použitelné
+ * na malém displeji:
+ *   - Segment boxy    – zmenšený padding, vertikální layout
+ *   - Hlavička závodu – menší font, zalamované tlačítka
+ *   - Modální okna    – plná šířka, zvětšená výška obsahu
+ *   - Sidebar         – roztažen na 100% šířky obrazovky
+ *   - Analytické karty – 2 sloupce místo 4
+ */
+
 @media (max-width: 600px) {
+
+    /* --- Segment boxy: kompaktnější na mobilu --- */
     .segment-box {
         padding: 1rem;
-        /* Menší padding na mobilu */
     }
 
+    /* Horní řádek – pod sebe místo vedle sebe */
     .seg-top-row {
         flex-direction: column;
         align-items: flex-start;
         gap: 12px;
     }
 
+    /* Badge běžce a noční badge – zarovnání doprava */
     .seg-right-group {
         width: 100%;
         justify-content: flex-end;
-        /* Odznaky běžce doprava, pokud se zalomí */
     }
 
+    /* Časový řádek – pod sebe */
     .seg-timing-row {
         flex-direction: column;
-        /* Start a Odhad vs. Input se dají pod sebe */
         align-items: flex-start;
         gap: 12px;
     }
 
+    /* Pravá část timingu – na celou šířku s vlastním pozadím */
     .timing-right {
         width: 100%;
         justify-content: space-between;
-        /* Roztáhne +/- čas a input na celou šířku */
         background: rgba(0, 0, 0, 0.02);
         padding: 8px;
         border-radius: 6px;
@@ -39,20 +51,21 @@
         background: rgba(255, 255, 255, 0.02);
     }
 
+    /* Statistiky – 2 sloupce místo 4 */
     .seg-stats-table {
         grid-template-columns: 1fr 1fr;
-        /* Na mobilu 2 sloupce místo 4 vedle sebe */
         gap: 12px;
     }
 
+    /* Patička – na střed */
     .seg-footer {
         flex-direction: column;
         align-items: center;
-        /* Vystředí texty v patičce */
         text-align: center;
     }
 
-    /* --- Hlavička závodu: nadpis + akční tlačítka --- */
+
+    /* --- Hlavička závodu: kompaktnější --- */
     .summary-box-wrapper {
         padding: 1rem;
     }
@@ -62,6 +75,7 @@
         margin-bottom: 1rem;
     }
 
+    /* Akční tlačítka – menší padding a font */
     .header-actions {
         flex-wrap: wrap;
         gap: 6px;
@@ -72,6 +86,7 @@
         font-size: 0.8rem;
     }
 
+    /* Souhrnné hodnoty – zalamování */
     .summary-table-container {
         flex-wrap: wrap;
         gap: 10px;
@@ -80,6 +95,7 @@
     .summary-col .val {
         font-size: 1.1rem;
     }
+
 
     /* --- Modální okna: plná šířka na mobilu --- */
     .modal-content {
@@ -100,13 +116,15 @@
         font-size: 1.1rem;
     }
 
-    /* --- Sidebar na mobilu: plná šířka --- */
+
+    /* --- Sidebar: plná šířka na mobilu --- */
     .sidebar {
         width: 100%;
         right: -100%;
     }
 
-    /* --- Analysis modal: menší grid --- */
+
+    /* --- Analytické karty: 2 sloupce místo 4 --- */
     .analysis-grid {
         grid-template-columns: 1fr 1fr;
     }

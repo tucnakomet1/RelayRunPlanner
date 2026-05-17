@@ -1,3 +1,22 @@
+/*
+ * components.css – Styly pro UI komponenty aplikace
+ *
+ * Obsahuje styly pro všechny opakovaně použitelné komponenty:
+ *   - Karty běžců (.runner-card)       – formulář pro přidání běžce (Step 2)
+ *   - Seznam závodů (.race-list)       – odkazy na uložené závody (Step 1)
+ *   - Souhrnný box (.summary-box)      – záhlaví detailu závodu (Step 3)
+ *   - Modální okna (.modal)            – nastavení, analýza, Smart Gen
+ *   - Sidebar běžců (.sidebar)         – postranní panel se seznamem běžců
+ *   - Dropdown menu (.sidebar-dropdown)– rozbalovací nabídka generátoru
+ *   - Analytické karty (.analysis-card)– výsledky generování úseků
+ *   - Tlačítko smazání (.btn-delete-race)
+ */
+
+
+/* ============================================
+   KARTA BĚŽCE (Step 2 – přidávání členů týmu)
+   ============================================ */
+
 .runner-card {
     border: 1px solid var(--border-color);
     padding: 1rem;
@@ -6,6 +25,7 @@
     background: var(--bg-color);
 }
 
+/* Hlavička karty běžce (číslo + smazat) */
 .r-header {
     display: flex;
     justify-content: space-between;
@@ -18,6 +38,7 @@
     color: var(--primary);
 }
 
+/* Tlačítko pro smazání běžce */
 .del-btn {
     background: none;
     border: none;
@@ -26,6 +47,7 @@
     font-weight: bold;
 }
 
+/* Grid s inputy běžce (jméno, čas, vzdálenost...) */
 .runner-inputs {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -33,6 +55,7 @@
     margin-bottom: 10px;
 }
 
+/* Inputy pro zadání čísel úseků */
 .seg-inputs {
     display: flex;
     gap: 10px;
@@ -43,6 +66,7 @@
     width: 100px;
 }
 
+/* Tlačítka „Zpět" a „Odeslat" ve Step 2 */
 .actions {
     display: flex;
     gap: 1rem;
@@ -54,13 +78,18 @@
     margin-top: 0;
 }
 
-/* Styly pro seznam existujících závodů na hlavní stránce */
+
+/* ============================================
+   SEZNAM ULOŽENÝCH ZÁVODŮ (Step 1)
+   ============================================ */
+
 .race-list {
     display: flex;
     flex-direction: column;
     gap: 12px;
 }
 
+/* Odkaz na existující závod */
 .race-link-item {
     display: flex;
     align-items: center;
@@ -90,6 +119,7 @@
     font-weight: 600;
 }
 
+/* Šipka na konci odkazu */
 .race-link-arrow {
     color: var(--primary);
     font-weight: bold;
@@ -100,17 +130,21 @@
     opacity: 1;
 }
 
-/* Výsledky */
+
+/* ============================================
+   SOUHRNNÝ BOX ZÁVODU (Step 3 – záhlaví)
+   ============================================ */
+
 .summary-box-wrapper {
     background: var(--card-bg);
     border-bottom: 4px solid var(--primary);
-    /* Jen spodní linka pro čistší vzhled */
     padding: 2rem;
     border-radius: 20px;
     margin-bottom: 4rem;
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
 }
 
+/* Řádek s názvem závodu a akčními tlačítky */
 .header-row {
     display: flex;
     justify-content: space-between;
@@ -126,6 +160,7 @@
     flex-wrap: wrap;
 }
 
+/* Název závodu – gradient text */
 .summary-box-wrapper h2 {
     color: var(--primary);
     text-align: center;
@@ -140,6 +175,7 @@
     text-transform: uppercase;
 }
 
+/* Tabulka souhrnných hodnot (start, doba běhu, doběh) */
 .summary-table-container {
     display: flex;
     justify-content: space-around;
@@ -164,7 +200,12 @@
     font-weight: 800;
 }
 
-/* --- Modal Styles --- */
+
+/* ============================================
+   MODÁLNÍ OKNA (nastavení, analýza, generátor)
+   ============================================ */
+
+/* Překryvná vrstva s rozmazáním pozadí */
 .modal {
     display: none;
     position: fixed;
@@ -178,6 +219,7 @@
     backdrop-filter: blur(4px);
 }
 
+/* Obsah modálního okna */
 .modal-content {
     background-color: var(--card-bg);
     margin: 5vh auto;
@@ -189,6 +231,7 @@
     box-shadow: var(--shadow-lg);
 }
 
+/* Hlavička modálu (titulek + zavírací křížek) */
 .modal-header {
     display: flex;
     justify-content: space-between;
@@ -220,6 +263,7 @@
     color: var(--text-main);
 }
 
+/* Patička modálu (tlačítka Zrušit / Uložit) */
 .modal-footer {
     display: flex;
     justify-content: flex-end;
@@ -233,6 +277,7 @@
     margin-top: 0;
 }
 
+/* Editace běžce v modálu */
 .edit-runner-item {
     background: rgba(0, 0, 0, 0.02);
     border: 1px solid var(--border-color);
@@ -268,6 +313,7 @@
     grid-column: span 2;
 }
 
+/* Gradient pro kartu nastavení (světlý / tmavý režim) */
 .card-settings {
     --box-gradient: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 70%, #fef3c7 100%);
     background: var(--box-gradient);
@@ -277,25 +323,31 @@
     --box-gradient: linear-gradient(135deg, #1e293b 0%, #1e1b4b 70%, #2d2a10 100%);
 }
 
-/* --- Sidebar Styles --- */
+
+/* ============================================
+   POSTRANNÍ PANEL (SIDEBAR) – seznam běžců
+   ============================================ */
+
 .sidebar {
     position: fixed;
     top: 0;
-    right: -350px;
+    right: -350px;               /* Skrytý mimo obrazovku */
     width: 350px;
     height: 100%;
     background-color: var(--card-bg);
     box-shadow: -4px 0 15px rgba(0, 0, 0, 0.1);
-    transition: right 0.3s ease;
+    transition: right 0.3s ease; /* Plynulé vysunutí */
     z-index: 1100;
     overflow-y: auto;
     border-left: 1px solid var(--border-color);
 }
 
+/* Otevřený stav – sidebar je viditelný */
 .sidebar.open {
     right: 0;
 }
 
+/* Hlavička sidebaru (sticky – zůstává nahoře při scrollu) */
 .sidebar-header {
     display: flex;
     justify-content: space-between;
@@ -313,6 +365,7 @@
     color: var(--text-main);
 }
 
+/* Akční tlačítka v hlavičce sidebaru */
 .sidebar-actions {
     display: flex;
     align-items: center;
@@ -331,10 +384,12 @@
     color: var(--primary);
 }
 
+/* Tělo sidebaru */
 .sidebar-body {
     padding: 20px;
 }
 
+/* Karta jednoho běžce v sidebaru */
 .sidebar-runner-item {
     background: rgba(0, 0, 0, 0.02);
     border: 1px solid var(--border-color);
@@ -343,6 +398,7 @@
     overflow: hidden;
 }
 
+/* Hlavička běžce (jméno + editační tlačítko) */
 .sidebar-runner-header {
     display: flex;
     justify-content: space-between;
@@ -366,6 +422,7 @@
     color: var(--primary);
 }
 
+/* Editační formulář běžce (skrytý, aktivuje se kliknutím na ✏️) */
 .sidebar-runner-form {
     display: none;
     padding: 15px;
@@ -393,11 +450,17 @@
     border-radius: 4px;
 }
 
+
+/* ============================================
+   DROPDOWN MENU (generátor úseků v sidebaru)
+   ============================================ */
+
 .sidebar-dropdown {
     position: relative;
     display: inline-block;
 }
 
+/* Rozbalovací obsah – skrytý ve výchozím stavu */
 .sidebar-dropdown-content {
     display: none;
     position: absolute;
@@ -422,11 +485,16 @@
     background-color: rgba(0, 0, 0, 0.03);
 }
 
+/* Zobrazení dropdownu při aktivaci */
 .sidebar-dropdown.active .sidebar-dropdown-content {
     display: block;
 }
 
-/* --- Analysis Modal Styles --- */
+
+/* ============================================
+   ANALYTICKÉ KARTY (výsledky generování úseků)
+   ============================================ */
+
 .analysis-card {
     background: rgba(0, 0, 0, 0.02);
     border: 1px solid var(--border-color);
@@ -435,6 +503,7 @@
     border-radius: 10px;
 }
 
+/* Grid se statistikami (úseky, vzdálenost, stoupání, klesání) */
 .analysis-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -464,6 +533,12 @@
     color: var(--text-main);
 }
 
+
+/* ============================================
+   TLAČÍTKO SMAZÁNÍ ZÁVODU
+   ============================================ */
+
+/* Červené kolečko s křížkem – objeví se při hoveru nad závodem */
 .btn-delete-race {
     position: absolute;
     right: 45px;
@@ -482,10 +557,11 @@
     font-size: 1.2rem;
     line-height: 1;
     transition: all 0.2s ease;
-    opacity: 0;
+    opacity: 0;                  /* Skrytý ve výchozím stavu */
     z-index: 10;
 }
 
+/* Zobrazení při hoveru nad wrapperem závodu */
 .race-link-wrapper:hover .btn-delete-race {
     opacity: 1;
 }

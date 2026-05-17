@@ -1,10 +1,23 @@
+/*
+ * base.css – Základní layout a globální styly stránky
+ *
+ * Obsahuje styly pro hlavní strukturální elementy:
+ *   - <body>    – pozadí a typografie
+ *   - <header>  – horní lišta s názvem aplikace a přepínačem motivu
+ *   - <main>    – centrální obsahová oblast
+ *   - .card     – univerzální karta (formuláře, obsah)
+ *   - .fade-in  – vstupní animace při načtení stránky
+ */
+
+/* --- Tělo stránky --- */
 body {
     background: var(--bg-gradient);
-    background-attachment: fixed;
+    background-attachment: fixed;       /* Gradient zůstane fixní při scrollování */
     font-family: 'Inter', sans-serif;
     color: var(--text-main);
 }
 
+/* --- Horní lišta --- */
 header {
     background: var(--card-bg);
     padding: 1rem 2rem;
@@ -15,6 +28,7 @@ header {
     border-bottom: 1px solid var(--border-color);
 }
 
+/* Název aplikace s gradientem */
 header h1 {
     margin: 0;
     font-size: 1.8rem;
@@ -25,6 +39,7 @@ header h1 {
     letter-spacing: -0.5px;
 }
 
+/* Tlačítko přepínání světlý/tmavý režim */
 #themeToggle {
     background: none;
     border: none;
@@ -33,12 +48,14 @@ header h1 {
     filter: grayscale(0.2);
 }
 
+/* --- Centrální obsahová oblast --- */
 main {
     max-width: 800px;
     margin: 2rem auto;
     padding: 0 1rem;
 }
 
+/* --- Vstupní animace (fade + slide up) --- */
 .fade-in {
     animation: fadeIn 0.4s ease-in;
 }
@@ -55,6 +72,7 @@ main {
     }
 }
 
+/* --- Univerzální karta --- */
 .card {
     background: var(--box-gradient);
     padding: 2.5rem;
@@ -63,6 +81,7 @@ main {
     border: 1px solid var(--border-yellow);
 }
 
+/* Nadpis uvnitř karty – gradient text */
 .card h2 {
     color: var(--primary);
     margin-top: 0;

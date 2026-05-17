@@ -1,16 +1,40 @@
-/* Boxy s úseky */
+/*
+ * segments.css – Styly pro boxy jednotlivých úseků závodu
+ *
+ * Každý úsek závodu je vizuálně reprezentován jako karta (.segment-box)
+ * s barevným levým okrajem odpovídajícím barvě přiřazeného běžce.
+ *
+ * Obsahuje:
+ *   - .segment-box     – hlavní kontejner úseku (denní/noční gradient)
+ *   - .seg-top-row     – horní řádek (číslo, název, checkbox, badge běžce)
+ *   - .seg-timing-row  – časové údaje (start, odhad, skutečný čas)
+ *   - .seg-stats-table – statistiky úseku (délka, stoupání, klesání, tempo)
+ *   - .seg-footer      – patička (obtížnost, etapa běžce, předávka)
+ *   - .night-mode      – vizuální úpravy pro noční úseky
+ */
+
+
+/* ============================================
+   KONTEJNER PRO SEZNAM ÚSEKŮ
+   ============================================ */
+
 .segments-container {
     display: flex;
     flex-direction: column;
     gap: 2.5rem;
 }
 
+
+/* ============================================
+   BOX JEDNOHO ÚSEKU
+   ============================================ */
+
 .segment-box {
     /* Výchozí gradient pro DENNÍ úsek v LIGHT mode */
     --box-gradient: linear-gradient(135deg, #ffffff 0%, #f0f9ff 70%, #e0f2fe 100%);
     background: var(--box-gradient);
     border: 1px solid var(--border-yellow);
-    border-left-width: 10px;
+    border-left-width: 10px;         /* Silný levý okraj – barva běžce */
     border-left-style: solid;
     padding: 1.5rem;
     border-radius: 12px;
@@ -20,14 +44,20 @@
     overflow: hidden;
 }
 
+/* Denní úsek v DARK mode */
 [data-theme="dark"] .segment-box:not(.night-mode) {
-    /* Výchozí gradient pro DENNÍ úsek v DARK mode */
     --box-gradient: linear-gradient(135deg, #1e293b 0%, #0f172a 70%, #0c1a2e 100%);
 }
 
+/* Hover efekt – jemné nadzvednutí */
 .segment-box:hover {
     transform: translateY(-2px);
 }
+
+
+/* ============================================
+   HORNÍ ŘÁDEK (číslo, název, checkbox, badge)
+   ============================================ */
 
 .seg-top-row {
     display: flex;
@@ -38,48 +68,50 @@
     gap: 10px;
 }
 
+/* Titulek úseku (číslo + název + checkbox) */
 .seg-title {
     display: flex;
     align-items: center;
     gap: 12px;
 }
 
+/* Číslo úseku (inverzní barvy) */
 .seg-id {
     background: var(--text-main);
     color: var(--card-bg);
-    /* Oproti minule upraveno, aby to bylo čitelné (bílá v light, černá v dark) */
     font-size: 1.2rem;
     font-weight: 800;
     padding: 4px 10px;
     border-radius: 6px;
 }
 
+/* Název úseku */
 .seg-name {
     font-size: 1.4rem;
     font-weight: 700;
     color: var(--text-main);
 }
 
-/* Interaktivní custom checkbox (vedle jména úseku) */
+/* Interaktivní custom checkbox (označení „doběhnuto") */
 .status-check {
     cursor: pointer;
     display: flex;
     align-items: center;
 }
 
+/* Vizuální checkbox (skrytý nativní, custom vzhled) */
 .custom-chk {
     display: inline-block;
     width: 22px;
     height: 22px;
-    border: 2px solid #eab308;
-    /* Stejná žlutá jako border boxu */
+    border: 2px solid var(--border-yellow);
     border-radius: 6px;
     position: relative;
     transition: all 0.2s;
     background: transparent;
-    border: 2px solid var(--border-yellow);
 }
 
+/* Zaškrtnutý stav – žluté pozadí s fajfkou */
 input:checked+.custom-chk {
     background-color: #eab308;
 }
@@ -87,7 +119,6 @@ input:checked+.custom-chk {
 input:checked+.custom-chk::after {
     content: '✓';
     color: #fff;
-    /* Vždy bílá fajfka */
     position: absolute;
     top: 50%;
     left: 50%;
@@ -96,13 +127,14 @@ input:checked+.custom-chk::after {
     font-weight: bold;
 }
 
-/* Pravá část vrchního řádku */
+/* Pravá část vrchního řádku (badge nočního režimu + badge běžce) */
 .seg-right-group {
     display: flex;
     align-items: center;
     gap: 10px;
 }
 
+/* Obecný badge */
 .badge {
     padding: 4px 8px;
     border-radius: 6px;
@@ -110,11 +142,13 @@ input:checked+.custom-chk::after {
     font-weight: bold;
 }
 
+/* Badge pro noční úsek */
 .night-badge {
     background: #1e293b;
     color: #fbbf24;
 }
 
+/* Badge s jménem běžce (barva pozadí nastavena inline) */
 .runner-badge {
     color: white;
     padding: 4px 12px;
@@ -125,7 +159,11 @@ input:checked+.custom-chk::after {
     box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
 }
 
-/* Timing řádek s flexboxem (zarovnání vstupu doprava) */
+
+/* ============================================
+   ŘÁDEK S ČASOVÝMI ÚDAJI
+   ============================================ */
+
 .seg-timing-row {
     margin-bottom: 1rem;
     font-weight: 500;
@@ -134,33 +172,37 @@ input:checked+.custom-chk::after {
     align-items: center;
     gap: 8px;
     min-height: 35px;
-    flex-wrap: wrap;
-    /* Umožní zalomení na mobilu */
+    flex-wrap: wrap;             /* Umožní zalomení na mobilu */
 }
 
+/* Levá část – start a odhad trvání */
 .timing-left {
     display: flex;
     align-items: center;
     gap: 8px;
 }
 
+/* Pravá část – odchylka od plánu a input skutečného času */
 .timing-right {
     display: flex;
     align-items: center;
     gap: 10px;
 }
 
+/* Oddělovací tečka mezi startem a odhadem */
 .dot {
     color: var(--primary);
     font-size: 1.2rem;
 }
 
+/* Tag s odchylkou od plánovaného času (+/-) */
 .diff-tag {
     font-weight: bold;
     font-size: 0.95rem;
     font-family: monospace;
 }
 
+/* Input pro zadání skutečného času úseku */
 .actual-time-input {
     width: 90px;
     padding: 4px 8px;
@@ -171,6 +213,11 @@ input:checked+.custom-chk::after {
     background: var(--bg-gradient);
     color: var(--text-main);
 }
+
+
+/* ============================================
+   TABULKA STATISTIK ÚSEKU
+   ============================================ */
 
 .seg-stats-table {
     display: grid;
@@ -183,6 +230,7 @@ input:checked+.custom-chk::after {
     backdrop-filter: blur(5px);
 }
 
+/* Sloupec jedné statistiky (label + hodnota) */
 .stat-col {
     display: flex;
     flex-direction: column;
@@ -202,7 +250,11 @@ input:checked+.custom-chk::after {
     color: var(--text-main);
 }
 
-/* Footer layout */
+
+/* ============================================
+   PATIČKA ÚSEKU
+   ============================================ */
+
 .seg-footer {
     display: flex;
     justify-content: space-between;
@@ -211,8 +263,7 @@ input:checked+.custom-chk::after {
     padding-top: 0.8rem;
     font-size: 0.85rem;
     color: var(--text-muted);
-    flex-wrap: wrap;
-    /* Umožní zalomení na mobilu */
+    flex-wrap: wrap;             /* Umožní zalomení na mobilu */
     gap: 8px;
 }
 
@@ -220,18 +271,23 @@ input:checked+.custom-chk::after {
     color: var(--text-main);
 }
 
-/* Úpravy pro noční režim */
+
+/* ============================================
+   NOČNÍ REŽIM – úpravy gradientů pro noční úseky
+   ============================================ */
+
+/* Noční úsek ve LIGHT mode (modro-fialovo-zlatý gradient) */
 .night-mode {
-    /* Noční úsek pro LIGHT mode (modro-fialovo-zlatá) */
     --box-gradient: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 70%, #fef3c7 100%);
     border-color: rgba(251, 191, 36, 0.2);
 }
 
+/* Noční úsek v DARK mode (tmavě fialový gradient) */
 [data-theme="dark"] .night-mode {
-    /* Noční úsek pro DARK mode */
     --box-gradient: linear-gradient(135deg, #1e293b 0%, #1e1b4b 70%, #2d2a10 100%);
 }
 
+/* Dark mode úpravy pro statistiky a input */
 [data-theme="dark"] .seg-stats-table {
     background: rgba(255, 255, 255, 0.03);
 }
