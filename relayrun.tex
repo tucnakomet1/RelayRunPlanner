@@ -1,0 +1,223 @@
+\documentclass[10pt, a4paper]{article}
+
+\usepackage[margin=0.7in]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage[czech]{babel}
+
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage[shortlabels]{enumitem}
+
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, calc}
+
+% Definice barev pro auta
+\definecolor{colorCar1}{RGB}{52, 152, 219}  % Modrá
+\definecolor{colorCar2}{RGB}{46, 204, 113}  % Zelená
+\definecolor{colorCar3}{RGB}{230, 126, 34} % Oranžová
+\definecolor{base}{RGB}{231, 76, 60}
+
+
+\begin{document}
+	\section*{Optimalizace úseků pro štafetové závody}
+
+	Chceme vytvořit férový rozpis úseků pro všechny běžce v týmu. Plán musí zajistit, aby si každý dostatečně odpočinul, aby auta stíhala přejíždět a aby nikdo nedostal naloženo výrazně víc než ostatní z hlediska kilometrů i kopců.
+	
+	\subsection*{Definice a značení.}
+	Před samotným modelem si definujeme základní parametry, se kterými pracujeme:
+	
+	\begin{table}[h]
+		\centering
+		\begin{tabular}{ll}
+			\toprule
+			\textbf{Symbol} & \textbf{Význam} \\
+			\midrule
+			$S$ & Celkový počet úseků v závodě. \\
+			$R$ & Celkový počet běžců v týmu. \\
+			$G$ & Minimální pauza (počet úseků), kterou běžec musí mít mezi starty (odpočinek). \\
+			$s$ & Index konkrétního úseku, $s \in \{0, \dots, S-1\}$. \\
+			$r$ & Index konkrétního běžce, $r \in \{0, \dots, R-1\}$. \\
+			$d_s$ & Délka úseku $s$ v kilometrech. \\
+			$e_s$ & Převýšení úseku $s$ v metrech. \\
+			$K_r$ & Kolik úseků má běžec $r$ celkem běžet (obvykle 3). \\
+			$C$ & Počet aut v týmu (obvykle 1 až 3). \\
+			\bottomrule
+		\end{tabular}
+	\end{table}
+	
+	\subsection*{Modelování celočíselného lineárního programu.}
+	K nalezení optimálního rozpisu využijeme celočíselné lineární programování (ILP). Tento přístup nám umožňuje převést diskrétní rozhodnutí (zda konkrétní běžec poběží konkrétní úsek) na hledání extrému matematické funkce při dodržení zadaných omezení. Cílem je transformovat problém do soustavy lineárních rovnic a nerovnic. K tomu si musíme definovat \textit{rozhodovací proměnné}, \textit{omezující podmínky} a \textit{účelovou funkci}.
+	
+	\paragraph*{Rozhodovací proměnná.}
+	Základem je binární proměnná $x_{r,s} \in \{0,1\}$, která říká, zda běžec běží daný úsek:
+	\[
+	x_{r,s} = 
+	\begin{cases} 
+		1 & \text{pokud běžec } r \text{ běží úsek } s, \\
+		0 & \text{jinak.}
+	\end{cases}
+	\]
+	
+	\paragraph*{Podmínky.} Musí platit následující omezující podmínky:
+	
+	\begin{enumerate}[(1)]
+		\item \textbf{Obsazení úseku:} Každý úsek musí běžet \textit{právě jeden} člověk.\\
+		Tedy pro každý úsek $s$ musí platit, že nějaký jeden běžec $r$ vždy běží tento úsek $s ~ \leadsto$ součet je právě $1$.
+		\[ \forall s: \sum_{r=0}^{R-1} x_{r,s} = 1 \]
+		
+		\item \textbf{Zátěž běžce:} Každý běžec $r$ musí odběhnout \textit{právě $K_r$ úseků}.
+		\[ \forall r: \sum_{s=0}^{S-1} x_{r,s} = K_r \]
+		
+		\item \textbf{Odpočinek:} Pokud běžec $r$ doběhne úsek, musí následovat \textit{pauza $G$ úseků}, než může vyběhnout znovu.
+		\[ \forall r, \forall s: \sum_{k=s}^{s+G} x_{r,k} \le 1 \]
+		
+		\item \textbf{Logistika aut:} Pokud auto obsluhuje jen určitý úsek trati, mohou v něm běžet pouze běžci, kteří jsou v daném autě přiřazeni.
+	\end{enumerate}
+	
+	\paragraph*{Účelová funkce.}
+	
+	Snažíme se o to, aby celková vzdálenost a převýšení byla mezi běžce rozdělena spravedlivě. Protože ILP řešiče neumí přímo pracovat s absolutní hodnotou, zavádíme pomocné proměnné $y_{r,d}$ a $y_{r,e}$ pro reprezentaci odchylek.\\
+	Nejprve definujeme průměrnou vzdálenost $T_{r,d}$ a průměrné převýšení $T_{r,e}$ pro běžce $r$ jako:\[
+		T_{r,d} = K_r \cdot \bar{d}, \quad T_{r,e} = K_r \cdot \bar{e}~, \quad\text{ kde }\quad
+		\bar{d} = \frac{\sum_{s=0}^{S-1} d_s}{S}, \quad  \bar{e} = \frac{\sum_{s=0}^{S-1} e_s}{S}
+	\]
+	Účelovou funkci pak definujeme jako minimalizaci váženého součtu těchto odchylek:\[
+		\min \sum_{r=0}^{R-1} (y_{r,d} + w \cdot y_{r,e})
+	\]
+	Aby proměnné $y$ skutečně reprezentovaly absolutní odchylku od cíle, musíme pro každého běžce $r$ přidat následující omezující podmínky:
+	\begin{align*}
+		y_{r,d} &\ge \left( \sum_{s=0}^{S-1} x_{r,s} \cdot d_s \right) - T_{r,d} & y_{r,d} &\ge T_{r,d} - \left( \sum_{s=0}^{S-1} x_{r,s} \cdot d_s \right) \\
+		y_{r,e} &\ge \left( \sum_{s=0}^{S-1} x_{r,s} \cdot e_s \right) - T_{r,e} & y_{r,e} &\ge T_{r,e} - \left( \sum_{s=0}^{S-1} x_{r,s} \cdot e_s \right)
+	\end{align*}
+	Konstanta $w$ (např. $0,01$) vyrovnává rozdílné řády jednotek (kilometry vs. metry).
+	
+	
+	\subsection*{Logistika.}
+	Logistický model určuje, jakým způsobem se běžci dopravují na starty svých úseků a jak jsou vyzvedáváni v cíli. Volba závisí na topologii závodu:
+	
+	\paragraph*{Lineární trasa (Vltava Run).}
+	Tento model je založen na cyklickém střídání celých posádek vozidel. Pro typický závod o $36$ úsecích se $12$ běžci a $3$ auty funguje logika následovně:
+	\begin{itemize}
+		\item Každé auto tvoří fixní posádku $4$ běžců (např. Auto $1$: Běžci $A, B, C, D$).
+		\item \textit{Auto1} odběhne první $4$ úseky, \textit{Auto2} další $4$ a \textit{Auto3} zbylé $4$ úseky první třetiny závodu.
+		\item Jakmile \textit{Auto1} dokončí svůj blok, jeho posádka odpočívá a auto se přesouvá na start $13.$ úseku (za blok \textit{Auta3}), kde celý proces začíná znovu.
+	\end{itemize}
+	
+	\noindent\begin{figure}[h]
+		\centering
+		\begin{tikzpicture}[
+			node distance=1.2cm, % Prodloužení horizontálních mezer pro delší šipky
+			% Styl pro boxy aut (jemný podkres)
+			carbox/.style={rectangle, rounded corners=8pt, draw=#1, fill=#1!8, thick, minimum width=3.5cm, minimum height=2.6cm, align=center},
+			% Styl pro úseky (zaoblené a barvy odpovídají autu)
+			block/.style={rectangle, rounded corners=5pt, draw=#1, fill=#1!8, font=\bfseries, minimum width=2.5cm, inner sep=5pt}
+			]
+			
+			% 1. Definice Aut (Horní řada)
+			\node[carbox=colorCar1] (A1) {
+				\textcolor{colorCar1!80!black}{\textbf{AUTO 1}}\\
+				Běžec A \\ Běžec B \\ Běžec C \\ Běžec D
+			};
+			\node[carbox=colorCar2, right=of A1] (A2) {
+				\textcolor{colorCar2!80!black}{\textbf{AUTO 2}}\\
+				Běžec E \\ Běžec F \\ Běžec G \\ Běžec H
+			};
+			\node[carbox=colorCar3, right=of A2] (A3) {
+				\textcolor{colorCar3!80!black}{\textbf{AUTO 3}}\\
+				Běžec I \\ Běžec J \\ Běžec K \\ Běžec L
+			};
+			
+			% 2. Časová osa / Bloky (Dolní část)
+			\begin{scope}[y={(0,2)},shift={(1,-1)}]
+				% První řada
+				\node[block=colorCar1] (b1) at (0,0) {Úseky 1--4};
+				\node[block=colorCar2, right=of b1] (b2) {Úseky 5--8};
+				\node[block=colorCar3, right=of b2] (b3) {Úseky 9--12};
+				
+				% Druhá řada
+				\node[block=colorCar1, below=0.6cm of b1] (b4) {Úseky 13--16};
+				\node[block=colorCar2, right=of b4] (b5) {Úseky 17--20};
+				\node[block=colorCar3, right=of b5] (b6) {Úseky 21--24};
+				
+				% Třetí řada
+				\node[block=colorCar1, below=0.6cm of b4] (b7) {Úseky 25--28};
+				\node[block=colorCar2, right=of b7] (b8) {Úseky 29--32};
+				\node[block=colorCar3, right=of b8] (b9) {Úseky 33--36};
+				
+				% Šipky postupu (Horizontální - rovné a dlouhé)
+				\foreach \i/\j in {1/2, 2/3, 4/5, 5/6, 7/8, 8/9} {
+					\draw[->, >=stealth, thick, gray!80] (b\i) -- (b\j);
+				}
+				
+				% Šipky návratu (Zakřivené "S-curve" šipky)
+				\draw[->, >=stealth, thick, gray!60] (b3.east) to[out=-20, in=160] (b4.west);
+				\draw[->, >=stealth, thick, gray!60] (b6.east) to[out=-20, in=160] (b7.west);
+				
+			\end{scope}
+			
+		\end{tikzpicture}
+		\caption{Schéma rotace posádek pro lineární závod (36 úseků, 12 běžců).}
+	\end{figure}
+	
+	
+	\paragraph{Centrální stanoviště (např. 250 Českým rájem).}
+	Díky centrálnímu stanovišti lze logistiku optimalizovat pomocí křížení tras aut. Auto nemusí čekat na celou svou posádku, ale vrací se pro odpočinek dříve:
+	\begin{itemize}
+		\item \textbf{Fáze 1 (Výjezd):} Auto 1 vyveze běžce A, B a C. Běžec A startuje, B a C se přesouvají na své předávky.
+		\item \textbf{Fáze 2 (Návrat):} Jakmile doběhne běžec B a předá běžci C, je úkol Auta 1 u konce. Auto 1 bere běžce A a B zpět na centrálu k odpočinku, zatímco běžec C stále běží.
+		\item \textbf{Fáze 3 (Předávka):} Mezitím vyjíždí z centrály Auto 2 s běžcem D. Potkává běžce C na konci jeho úseku. Dojde k předávce C $\rightarrow$ D.
+		\item \textbf{Fáze 4 (Kontinuita):} Běžec C nasedá do Auta 2 a pokračuje s ním (buď na další předávku, nebo na základnu později). Tímto se maximalizuje čas na spánek pro posádku Auta 1.
+	\end{itemize}
+	
+	\begin{figure}[h]
+		\centering
+		\begin{tikzpicture}[
+			node distance=1.8cm,
+			base/.style={circle, draw=red!80, fill=red!5, font=\bfseries, minimum size=2cm},
+			point/.style={circle, draw=black, fill=white, inner sep=2pt, font=\scriptsize},
+			car1/.style={->, >=stealth, thick, blue!70},
+			car2/.style={->, >=stealth, thick, green!60!black},
+			runner/.style={->, >=stealth, ultra thick, gray!40}
+			]
+			
+			% 1. Základna
+			\node[base] (Z) {ZÁKLADNA};
+			
+			% 2. Body předávek (lineární osa trati)
+			\node[right=3cm of Z] (PA) [point, label=above:{Start A}] {};
+			\node[right=1.8cm of PA] (PB) [point, label=above:{A$\to$B}] {};
+			\node[right=1.8cm of PB] (PC) [point, label=above:{B$\to$C}] {};
+			\node[right=1.8cm of PC] (PD) [point, label=above:{C$\to$D}] {};
+			
+			% 3. Trasa štafety (běžci na trati)
+			\draw[runner] (PA) -- node[below, black] {běží A} (PB);
+			\draw[runner] (PB) -- node[below, black] {běží B} (PC);
+			\draw[runner] (PC) -- node[below, black] {běží C} (PD);
+			
+			% 4. Logistika Auta 1
+			% Návrat (po předávce na C)
+			\draw[car1, left=25] (Z.east) to 
+			node[above, sloped, black, font=\footnotesize\bfseries] {Auto 1} 
+			node[below, sloped, black, font=\tiny] {(A, B, C)} 
+			(PA.west);
+			
+			% 5. Logistika Auta 2
+			% Výjezd pro D
+			\draw[car2, bend right=30] (Z.south east) to 
+			node[above, sloped, black, font=\footnotesize\bfseries] {Auto 2} 
+			node[below, sloped, black, font=\footnotesize] {D,E} 
+			(PD.south);
+			% Pokračování
+			\draw[car2, dashed] (PD.east) -- +(1.5,0) node[right, black, font=\footnotesize] {Auto 2 pokračuje s C, D a E};
+			
+		\end{tikzpicture}
+		\caption{Schéma dynamického kyvadla: Auto 1 se vrací dříve, Auto 2 přebírá štafetu na trati.}
+	\end{figure}
+	
+\end{document}
+
+
+

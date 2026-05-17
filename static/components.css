@@ -1,0 +1,496 @@
+.runner-card {
+    border: 1px solid var(--border-color);
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 8px;
+    background: var(--bg-color);
+}
+
+.r-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.r-header h4 {
+    margin: 0;
+    color: var(--primary);
+}
+
+.del-btn {
+    background: none;
+    border: none;
+    color: #ef4444;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.runner-inputs {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 15px;
+    margin-bottom: 10px;
+}
+
+.seg-inputs {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.seg-inputs input {
+    width: 100px;
+}
+
+.actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 2rem;
+    align-items: stretch;
+}
+
+.actions .btn-primary {
+    margin-top: 0;
+}
+
+/* Styly pro seznam existujících závodů na hlavní stránce */
+.race-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.race-link-item {
+    display: flex;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    background: var(--box-gradient);
+    border: 1px solid var(--border-yellow);
+    border-radius: 12px;
+    text-decoration: none;
+    color: var(--text-main);
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.race-link-item:hover {
+    transform: translateX(5px);
+    border-color: var(--primary);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.race-link-icon {
+    font-size: 1.2rem;
+    margin-right: 15px;
+}
+
+.race-link-name {
+    flex-grow: 1;
+    font-weight: 600;
+}
+
+.race-link-arrow {
+    color: var(--primary);
+    font-weight: bold;
+    opacity: 0.5;
+}
+
+.race-link-item:hover .race-link-arrow {
+    opacity: 1;
+}
+
+/* Výsledky */
+.summary-box-wrapper {
+    background: var(--card-bg);
+    border-bottom: 4px solid var(--primary);
+    /* Jen spodní linka pro čistší vzhled */
+    padding: 2rem;
+    border-radius: 20px;
+    margin-bottom: 4rem;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+.header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.header-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.summary-box-wrapper h2 {
+    color: var(--primary);
+    text-align: center;
+    opacity: 0.8;
+    font-size: 2.2rem;
+    font-weight: 900;
+    letter-spacing: -1px;
+    background: linear-gradient(to right, var(--primary), #fbbf24);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 1.5rem;
+    text-transform: uppercase;
+}
+
+.summary-table-container {
+    display: flex;
+    justify-content: space-around;
+    background: var(--bg-gradient);
+    padding: 1rem;
+    border-radius: 10px;
+}
+
+.summary-col {
+    text-align: center;
+}
+
+.summary-col .lbl {
+    display: block;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.summary-col .val {
+    font-size: 1.5rem;
+    font-weight: 800;
+}
+
+/* --- Modal Styles --- */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+}
+
+.modal-content {
+    background-color: var(--card-bg);
+    margin: 5vh auto;
+    padding: 25px;
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    width: 90%;
+    max-width: 600px;
+    box-shadow: var(--shadow-lg);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 15px;
+    margin-bottom: 20px;
+}
+
+.modal-header h3 {
+    margin: 0;
+    color: var(--primary);
+}
+
+.modal-header .close {
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    color: var(--text-muted);
+    line-height: 1;
+}
+
+.modal-header .close:hover {
+    color: var(--text-main);
+}
+
+.modal-body h4 {
+    margin-bottom: 15px;
+    color: var(--text-main);
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    margin-top: 25px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-color);
+}
+
+.modal-footer .btn-primary {
+    margin-top: 0;
+}
+
+.edit-runner-item {
+    background: rgba(0, 0, 0, 0.02);
+    border: 1px solid var(--border-color);
+    padding: 15px;
+    margin-bottom: 12px;
+    border-radius: 10px;
+}
+
+.edit-runner-item h5 {
+    margin: 0 0 15px 0;
+    font-size: 1.05rem;
+    color: var(--text-main);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.edit-runner-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+}
+
+.edit-runner-grid input {
+    padding: 0.6rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.edit-runner-segs {
+    grid-column: span 2;
+}
+
+.card-settings {
+    --box-gradient: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 70%, #fef3c7 100%);
+    background: var(--box-gradient);
+}
+
+[data-theme="dark"] .card-settings:not(.night-mode) {
+    --box-gradient: linear-gradient(135deg, #1e293b 0%, #1e1b4b 70%, #2d2a10 100%);
+}
+
+/* --- Sidebar Styles --- */
+.sidebar {
+    position: fixed;
+    top: 0;
+    right: -350px;
+    width: 350px;
+    height: 100%;
+    background-color: var(--card-bg);
+    box-shadow: -4px 0 15px rgba(0, 0, 0, 0.1);
+    transition: right 0.3s ease;
+    z-index: 1100;
+    overflow-y: auto;
+    border-left: 1px solid var(--border-color);
+}
+
+.sidebar.open {
+    right: 0;
+}
+
+.sidebar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--box-gradient);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.sidebar-header h3 {
+    margin: 0;
+    color: var(--text-main);
+}
+
+.sidebar-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.sidebar-actions button {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 1.2rem;
+}
+
+.sidebar-actions button:hover {
+    color: var(--primary);
+}
+
+.sidebar-body {
+    padding: 20px;
+}
+
+.sidebar-runner-item {
+    background: rgba(0, 0, 0, 0.02);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-bottom: 15px;
+    overflow: hidden;
+}
+
+.sidebar-runner-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 15px;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.sidebar-runner-edit-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 4px;
+}
+
+.sidebar-runner-edit-btn:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: var(--primary);
+}
+
+.sidebar-runner-form {
+    display: none;
+    padding: 15px;
+    border-top: 1px solid var(--border-color);
+    background: var(--card-bg);
+}
+
+.sidebar-runner-form.active {
+    display: block;
+}
+
+.sidebar-runner-form .form-group {
+    margin-bottom: 10px;
+}
+
+.sidebar-runner-form label {
+    font-size: 0.8rem;
+}
+
+.sidebar-runner-form input {
+    width: 100%;
+    padding: 0.5rem;
+    box-sizing: border-box;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+}
+
+.sidebar-dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.sidebar-dropdown-content {
+    display: none;
+    position: absolute;
+    right: 0;
+    background-color: var(--card-bg);
+    min-width: 200px;
+    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    z-index: 1200;
+}
+
+.sidebar-dropdown-content a {
+    color: var(--text-main);
+    padding: 12px 16px;
+    text-decoration: none;
+    display: block;
+    font-size: 0.9rem;
+}
+
+.sidebar-dropdown-content a:hover {
+    background-color: rgba(0, 0, 0, 0.03);
+}
+
+.sidebar-dropdown.active .sidebar-dropdown-content {
+    display: block;
+}
+
+/* --- Analysis Modal Styles --- */
+.analysis-card {
+    background: rgba(0, 0, 0, 0.02);
+    border: 1px solid var(--border-color);
+    padding: 15px;
+    margin-bottom: 12px;
+    border-radius: 10px;
+}
+
+.analysis-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 15px;
+    background: var(--card-bg);
+    padding: 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+}
+
+.analysis-grid .a-col {
+    display: flex;
+    flex-direction: column;
+}
+
+.analysis-grid .a-lbl {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+.analysis-grid .a-val {
+    font-size: 1rem;
+    font-weight: bold;
+    color: var(--text-main);
+}
+
+.btn-delete-race {
+    position: absolute;
+    right: 45px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #ef4444;
+    color: white;
+    border: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 1.2rem;
+    line-height: 1;
+    transition: all 0.2s ease;
+    opacity: 0;
+    z-index: 10;
+}
+
+.race-link-wrapper:hover .btn-delete-race {
+    opacity: 1;
+}
+
+.btn-delete-race:hover {
+    background: #dc2626;
+    transform: translateY(-50%) scale(1.1);
+}

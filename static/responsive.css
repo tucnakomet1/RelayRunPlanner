@@ -1,0 +1,113 @@
+/* =========================================
+   RESPONSIVITA PRO MOBILNÍ TELEFONY
+   ========================================= */
+@media (max-width: 600px) {
+    .segment-box {
+        padding: 1rem;
+        /* Menší padding na mobilu */
+    }
+
+    .seg-top-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .seg-right-group {
+        width: 100%;
+        justify-content: flex-end;
+        /* Odznaky běžce doprava, pokud se zalomí */
+    }
+
+    .seg-timing-row {
+        flex-direction: column;
+        /* Start a Odhad vs. Input se dají pod sebe */
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .timing-right {
+        width: 100%;
+        justify-content: space-between;
+        /* Roztáhne +/- čas a input na celou šířku */
+        background: rgba(0, 0, 0, 0.02);
+        padding: 8px;
+        border-radius: 6px;
+    }
+
+    [data-theme="dark"] .timing-right {
+        background: rgba(255, 255, 255, 0.02);
+    }
+
+    .seg-stats-table {
+        grid-template-columns: 1fr 1fr;
+        /* Na mobilu 2 sloupce místo 4 vedle sebe */
+        gap: 12px;
+    }
+
+    .seg-footer {
+        flex-direction: column;
+        align-items: center;
+        /* Vystředí texty v patičce */
+        text-align: center;
+    }
+
+    /* --- Hlavička závodu: nadpis + akční tlačítka --- */
+    .summary-box-wrapper {
+        padding: 1rem;
+    }
+
+    .summary-box-wrapper h2 {
+        font-size: 1.4rem;
+        margin-bottom: 1rem;
+    }
+
+    .header-actions {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .header-actions .btn {
+        padding: 0.35rem 0.6rem;
+        font-size: 0.8rem;
+    }
+
+    .summary-table-container {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .summary-col .val {
+        font-size: 1.1rem;
+    }
+
+    /* --- Modální okna: plná šířka na mobilu --- */
+    .modal-content {
+        width: 92% !important;
+        max-width: 100% !important;
+        margin: 2vh auto;
+        padding: 12px;
+        border-radius: 10px;
+        box-sizing: border-box;
+    }
+
+    .modal-body {
+        max-height: 80vh !important;
+        padding-right: 5px !important;
+    }
+
+    .modal-header h3 {
+        font-size: 1.1rem;
+    }
+
+    /* --- Sidebar na mobilu: plná šířka --- */
+    .sidebar {
+        width: 100%;
+        right: -100%;
+    }
+
+    /* --- Analysis modal: menší grid --- */
+    .analysis-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}

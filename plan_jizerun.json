@@ -1,0 +1,122 @@
+[
+    {
+        "usek_id": 1,
+        "nazev": "Čelákovice - Sojovice",
+        "delka_km": "9200",
+        "stoupani_m": "17",
+        "klesani_m": "10",
+        "obtiznost": "1"
+    },
+    {
+        "usek_id": 2,
+        "nazev": "Sojovice - Benátky n/J",
+        "delka_km": "12300",
+        "stoupani_m": "30",
+        "klesani_m": "18",
+        "obtiznost": "2"
+    },
+    {
+        "usek_id": 3,
+        "nazev": "Benátky n/J - Krnsko",
+        "delka_km": "11500",
+        "stoupani_m": "31",
+        "klesani_m": "30",
+        "obtiznost": "2"
+    },
+    {
+        "usek_id": 4,
+        "nazev": "Krnsko - Mladá Boleslav",
+        "delka_km": "10200",
+        "stoupani_m": "10",
+        "klesani_m": "0",
+        "obtiznost": "1"
+    },
+    {
+        "usek_id": 5,
+        "nazev": "Mladá Boleslav - Klášter",
+        "delka_km": "14600",
+        "stoupani_m": "65",
+        "klesani_m": "45",
+        "obtiznost": "3"
+    },
+    {
+        "usek_id": 6,
+        "nazev": "Klášter - Svijany",
+        "delka_km": "13500",
+        "stoupani_m": "122",
+        "klesani_m": "76",
+        "obtiznost": "4"
+    },
+    {
+        "usek_id": 7,
+        "nazev": "Svijany - Turnov",
+        "delka_km": "11100",
+        "stoupani_m": "21",
+        "klesani_m": "47",
+        "obtiznost": "2"
+    },
+    {
+        "usek_id": 8,
+        "nazev": "Turnov - Malá Skála",
+        "delka_km": "9800",
+        "stoupani_m": "25",
+        "klesani_m": "6",
+        "obtiznost": "1"
+    },
+    {
+        "usek_id": 9,
+        "nazev": "Malá Skála - Bozkov",
+        "delka_km": "13700",
+        "stoupani_m": "256",
+        "klesani_m": "30",
+        "obtiznost": "4"
+    },
+    {
+        "usek_id": 10,
+        "nazev": "Bozkov - Vysoké nad Jizerou",
+        "delka_km": "9800",
+        "stoupani_m": "308",
+        "klesani_m": "105",
+        "obtiznost": "4"
+    },
+    {
+        "usek_id": 11,
+        "nazev": "Vysoké nad Jizerou - Kořenov",
+        "delka_km": "8700",
+        "stoupani_m": "312",
+        "klesani_m": "225",
+        "obtiznost": "4"
+    },
+    {
+        "usek_id": 12,
+        "nazev": "Kořenov - Jizerka",
+        "delka_km": "9700",
+        "stoupani_m": "303",
+        "klesani_m": "175",
+        "obtiznost": "4"
+    },
+    {
+        "usek_id": 13,
+        "nazev": "Jizerka - Smědava",
+        "delka_km": "12600",
+        "stoupani_m": "127",
+        "klesani_m": "185",
+        "obtiznost": "3"
+    },
+    {
+        "usek_id": 14,
+        "nazev": "Smědava - Josefův Důl",
+        "delka_km": "10300",
+        "stoupani_m": "134",
+        "klesani_m": "415",
+        "obtiznost": "3"
+    },
+    {
+        "usek_id": 15,
+        "nazev": "Josefův Důl - Smržovka",
+        "delka_km": "7100",
+        "stoupani_m": "211",
+        "klesani_m": "148",
+        "obtiznost": "2"
+    }
+]

@@ -1,0 +1,1575 @@
+<!DOCTYPE html>
+<html lang="cs" data-theme="light">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RelayRunPlanner</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+    <header>
+        <h1>🏃‍♂️ RelayRunPlanner</h1>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-weight: 600; font-size: 0.9rem; color: var(--text-muted);">Motiv</span>
+            <button id="themeToggle" title="Přepnout motiv">🌓</button>
+        </div>
+    </header>
+
+    <main>
+        {% if step == 1 %}
+        <section class="card fade-in">
+            <h2>Základní informace</h2>
+            <form action="/step2" method="POST">
+                <div class="form-group">
+                    <label>Název závodu:</label>
+                    <input type="text" name="race_name" placeholder="Např. VltavaRun 2026" required>
+                </div>
+                <div class="form-group">
+                    <label>Start závodu:</label>
+                    <input type="datetime-local" name="start_time" required>
+                </div>
+                <div class="form-group">
+                    <label>Celkový počet úseků:</label>
+                    <input type="number" name="segment_count" min="1" placeholder="Např. 36" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Vytvořit nový závod ➔</button>
+            </form>
+
+            {% if existing_races %}
+            <div class="existing-races-section"
+                style="margin-top: 3rem; border-top: 1px solid var(--border-color); padding-top: 2rem;">
+                <h3 style="color: var(--primary); margin-bottom: 1.5rem;">Uložené závody</h3>
+                <div class="race-list">
+                    {% for race in existing_races %}
+                    <div class="race-link-wrapper" style="position: relative;">
+                        <a href="/race/{{ race.id }}" class="race-link-item">
+                            <span class="race-link-icon">🏃</span>
+                            <span class="race-link-name">{{ race.name }}</span>
+                            <span class="race-link-arrow">➔</span>
+                        </a>
+                        <button onclick="confirmDeleteRace('{{ race.id }}', '{{ race.name }}')" class="btn-delete-race"
+                            title="Smazat závod">×</button>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </section>
+
+        {% elif step == 2 %}
+        <section class="card fade-in">
+            <h2>Detail týmu - {{ race_name }}</h2>
+            <form action="/result" method="POST" enctype="multipart/form-data" id="raceForm">
+                <input type="hidden" name="race_name" value="{{ race_name }}">
+                <input type="hidden" name="start_time" value="{{ start_time }}">
+
+                <div class="form-group upload-box">
+                    <label>Nahrát trasu (JSON soubor):</label>
+                    <p class="hint">Nejprve si stáhni prázdnou šablonu pro {{ segment_count }} úseků, doplň data a
+                        nahraj ji zpět.</p>
+                    <a href="/sample/json/{{ segment_count }}" class="btn btn-outline">⬇️ Stáhnout prázdný JSON pro {{
+                        segment_count }} úseků</a>
+                    <input type="file" name="route_file" accept=".json" required style="margin-top: 15px;">
+                </div>
+
+                <h3>Členové týmu</h3>
+                <div class="card"
+                    style="margin-bottom: 2rem; padding: 1.5rem; background: rgba(0,0,0,0.02); border-color: var(--border-color); border-radius: 8px;">
+                    <h4 style="margin-top: 0; color: var(--primary);">Hromadné nastavení týmu</h4>
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label>Počet běžců:</label>
+                        <input type="number" id="globalRunnerCount" min="1" value="1"
+                            onchange="generateRunners(this.value)" style="max-width: 150px;">
+                    </div>
+                    <div class="form-group" style="display: flex; align-items: center; gap: 10px; margin-bottom: 0;">
+                        <input type="checkbox" id="globalControlCheck" onchange="toggleGlobalControl(this.checked)"
+                            style="width: auto;">
+                        <label style="margin: 0;">Stejný kontrolní úsek pro všechny</label>
+                    </div>
+                    <div id="globalControlInputs" style="display: none; gap: 15px; margin-top: 15px;">
+                        <div style="flex: 1;">
+                            <label>Délka kontrolního úseku (m)</label>
+                            <input type="number" id="globalControlDist" placeholder="např. 5000">
+                        </div>
+                        <div style="flex: 1;">
+                            <label>Převýšení (m)</label>
+                            <input type="number" id="globalControlElev" placeholder="např. 150">
+                        </div>
+                    </div>
+                </div>
+
+                <div id="runnersContainer"></div>
+
+                <input type="hidden" name="runners_data" id="runnersDataInput">
+                <div class="actions">
+                    <a href="/" class="btn btn-secondary">Zpět</a>
+                    <button type="submit" class="btn btn-primary" onclick="prepareSubmit(event)">Vygenerovat plán závodu
+                        🚀</button>
+                </div>
+            </form>
+        </section>
+
+        {% elif step == 3 %}
+        <section class="fade-in">
+            <div class="summary-box-wrapper">
+                <div class="header-row">
+                    <h2 style="margin: 0;">{{ race_name }}</h2>
+                    <div class="header-actions">
+                        <button class="btn btn-outline" style="padding: 0.5rem 1rem; width: auto; font-size: 0.9rem;"
+                            onclick="openLogisticsModal()">🚗 Logistika</button>
+                        <button class="btn btn-outline" style="padding: 0.5rem 1rem; width: auto; font-size: 0.9rem;"
+                            onclick="openSidebar()">🏃 Běžci</button>
+                        <button class="btn btn-outline" style="padding: 0.5rem 1rem; width: auto; font-size: 0.9rem;"
+                            onclick="openSettingsModal()">⚙️</button>
+                    </div>
+                </div>
+                <div class="summary-table-container">
+                    <div class="summary-col">
+                        <span class="lbl">Start</span>
+                        <span class="val" id="total-start-time">--:--</span>
+                    </div>
+                    <div class="summary-col">
+                        <span class="lbl">Čas běhu</span>
+                        <span class="val" id="total-duration">--:--</span>
+                    </div>
+                    <div class="summary-col">
+                        <span class="lbl">Doběh</span>
+                        <span class="val" id="total-finish-time">--:--</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="segments-container" id="segments-list">
+                {% for seg in segments %}
+                <div class="segment-box {% if seg.is_night %}night-mode{% endif %}" id="seg-{{ loop.index0 }}"
+                    data-index="{{ loop.index0 }}" data-planned-min="{{ seg.planned_duration_min }}"
+                    data-runner="{{ seg.runner }}" style="border-left-color: {{ seg.runner_color }};">
+
+                    <div class="seg-top-row">
+                        <div class="seg-title">
+                            <span class="seg-id">{{ seg.id }}</span>
+                            <span class="seg-name">{{ seg.name }}</span>
+                            <label class="status-check" title="Označit jako doběhnuté">
+                                <input type="checkbox" style="display:none;" {% if seg.is_done %}checked{% endif %}
+                                    onchange="toggleDone({{ loop.index0 }}, this)">
+                                <span class="custom-chk"></span>
+                            </label>
+                        </div>
+                        <div class="seg-right-group">
+                            {% if seg.is_night %}<span class="badge night-badge">🌙 Noční</span>{% endif %}
+                            <span class="runner-badge" style="background-color: {{ seg.runner_color }};">{{ seg.runner
+                                }}</span>
+                        </div>
+                    </div>
+
+                    <div class="seg-timing-row">
+                        <div class="timing-left">
+                            <span class="start-time-text">Start --:--</span>
+                            <span class="dot">•</span>
+                            <span class="duration-text">odhad {{ (seg.planned_duration_min // 60)|int }}h {{
+                                (seg.planned_duration_min % 60)|int }}m</span>
+                        </div>
+                        <div class="timing-right">
+                            <span class="diff-tag"></span>
+                            <div class="actual-input-wrap"
+                                style="display: {% if seg.is_done %}block{% else %}none{% endif %};">
+                                <input type="text" placeholder="HH:MM:SS" class="actual-time-input"
+                                    value="{{ seg.actual_time }}" onchange="saveTimeInput({{ loop.index0 }}, this)">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="seg-stats-table">
+                        <div class="stat-col"><span>Délka</span><strong>{{ seg.dist }} km</strong></div>
+                        <div class="stat-col"><span>Stoupání</span><strong>↗ {{ seg.elev_up }}m</strong></div>
+                        <div class="stat-col"><span>Klesání</span><strong>↘ {{ seg.elev_down }}m</strong></div>
+                        <div class="stat-col"><span>Tempo</span><strong class="pace-val">--:--</strong></div>
+                    </div>
+
+                    <div class="seg-footer">
+                        <span>Obtížnost {{ seg.difficulty }}/5 • {{ seg.runner_iteration }}. etapa běžce</span>
+                        <span class="eta-text">Očekávaná předávka v <strong>--:--</strong></span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <div style="margin-top: 3rem; text-align: center;">
+                <p style="color: var(--text-muted); margin-bottom: 10px;">URL závodu: <strong
+                        style="user-select: all;">{{ request.url }}</strong></p>
+                <a href="/" class="btn btn-outline" style="width: auto;">Vytvořit nový závod</a>
+            </div>
+
+            <!-- Modal for Settings -->
+            <div id="settingsModal" class="modal">
+                <div class="modal-content card-settings">
+                    <div class="modal-header">
+                        <h3>Obecné nastavení</h3>
+                        <span class="close" onclick="closeSettingsModal()">&times;</span>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group" style="margin-bottom: 15px;">
+                            <label>Název závodu:</label>
+                            <input type="text" id="editRaceName" value="{{ race_name }}">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 25px;">
+                            <label>Start závodu:</label>
+                            <input type="datetime-local" id="editStartTime" value="{{ start_iso[:16] }}">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;"
+                            onclick="closeSettingsModal()">Zrušit</button>
+                        <button class="btn btn-primary" style="width: auto; padding: 0.5rem 1rem; margin-left: 10px;"
+                            onclick="saveGeneralSettings()">Uložit změny</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar for Runners -->
+            <div id="runnerSidebar" class="sidebar">
+                <div class="sidebar-header card-settings">
+                    <h3>Běžci</h3>
+                    <div class="sidebar-actions">
+                        <div class="sidebar-dropdown" id="segmentsDropdown">
+                            <button onclick="toggleDropdown()" title="Generátor úseků"
+                                style="display: flex; align-items: center; gap: 8px;">
+                                <img src="{{ url_for('static', filename='img/line-segments-thin-svgrepo-com.svg') }}"
+                                    alt="Generátor úseků"
+                                    style="width: 20px; height: 20px; filter: var(--icon-filter);">
+                            </button>
+                            <div class="sidebar-dropdown-content">
+                                <p style="margin-left: 10px; color: var(--text-muted);"><b>Generátor úseků</b></p>
+                                <hr>
+                                <a href="#" onclick="generateRandomSegments(); return false;">Vygenerovat náhodně</a>
+                                <a href="#" onclick="openSmartGenModal(); return false;">Pokročilé generování s
+                                    pravidly</a>
+                            </div>
+                        </div>
+                        <button onclick="closeSidebar()" title="Zavřít">&times;</button>
+                    </div>
+                </div>
+                <div class="sidebar-body" id="sidebarRunnersList">
+                    <!-- JS vygeneruje seznam -->
+                </div>
+            </div>
+
+            <!-- Analysis Modal -->
+            <div id="analysisModal" class="modal">
+                <div class="modal-content" style="max-width: 800px;">
+                    <div class="modal-header">
+                        <h3>Analýza vygenerovaných úseků</h3>
+                        <span class="close" onclick="closeAnalysisModal()">&times;</span>
+                    </div>
+                    <div class="modal-body" id="analysisModalBody"
+                        style="max-height: 60vh; overflow-y: auto; padding-right: 10px;">
+                        <!-- JS vygeneruje karty -->
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;"
+                            onclick="closeAnalysisModal()">Zahodit</button>
+                        <button class="btn btn-primary" style="width: auto; padding: 0.5rem 1rem; margin-left: 10px;"
+                            onclick="applyGeneratedSegments()">Uložit a použít návrh</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Smart Gen Modal -->
+            <div id="smartGenModal" class="modal">
+                <div class="modal-content" style="max-width: 600px;">
+                    <div class="modal-header">
+                        <h3>Pokročilé generování s pravidly</h3>
+                        <span class="close" onclick="closeSmartGenModal()">&times;</span>
+                    </div>
+                    <div class="modal-body" style="max-height: 65vh; overflow-y: auto; padding-right: 10px;">
+                        <div class="form-group" style="margin-bottom: 20px;">
+                            <label>Minimální pauza mezi úseky (počet úseků):</label>
+                            <input type="number" id="sgMinPause" value="3" min="0"
+                                style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color); box-sizing: border-box;">
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 20px;">
+                            <label>Počet aut v týmu:</label>
+                            <input type="number" id="sgCarCount" value="2" min="1"
+                                style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color); box-sizing: border-box;"
+                                onchange="updateSmartGenUI()">
+                        </div>
+
+
+
+                        <div class="form-group" style="margin-bottom: 20px;">
+                            <label
+                                style="display: flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
+                                <input type="checkbox" id="sgHasCentral" onchange="updateSmartGenUI()"
+                                    style="width: auto;">
+                                <strong>Máme centrálu</strong>
+                            </label>
+                            <p
+                                style="font-size: 0.85rem; color: var(--text-muted); margin-top: 5px; margin-left: 24px;">
+                                Např. závod 250 Český Ráj má centrálu v Sedmihorkách. Znamená to, že všichni běžci
+                                nemusí neustále přejíždět, ale mohou se vracet zpátky do centrály, kde se lidé v autech
+                                plynule prostřídají.
+                            </p>
+                        </div>
+
+                        <div id="sgPreferredPeopleContainer"
+                            style="display: none; margin-bottom: 20px; border-top: 1px solid var(--border-color); padding-top: 20px;">
+                            <label
+                                style="display: flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer; margin-bottom: 15px;">
+                                <input type="checkbox" id="sgUsePreferred" onchange="updateSmartGenUI()"
+                                    style="width: auto;">
+                                <strong>Preferovaní lidé v autech</strong>
+                            </label>
+                            <div id="sgCarFormsContainer"
+                                style="display: none; display: flex; flex-direction: column; gap: 15px;">
+                                <!-- JS vygeneruje bloky pro auta -->
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;"
+                            onclick="closeSmartGenModal()">Zrušit</button>
+                        <button class="btn btn-primary" style="width: auto; padding: 0.5rem 1rem; margin-left: 10px;"
+                            onclick="runSmartGeneration()">Vygenerovat</button>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+        <script>
+            const START_ISO = "{{ start_iso }}";
+            const RACE_ID = "{{ race_id }}";
+            const segmentsData = {{ segments| tojson }};
+            let runnersData = {{ runners| tojson }};
+
+            // Kompatibilita se staršími závody, které nemají uložené "runners"
+            if (!runnersData || runnersData.length === 0) {
+                const reconstructed = {};
+                segmentsData.forEach(seg => {
+                    if (seg.runner && seg.runner !== 'Nepřiřazeno') {
+                        if (!reconstructed[seg.runner]) {
+                            reconstructed[seg.runner] = {
+                                name: seg.runner,
+                                color: seg.runner_color || '#808080',
+                                ctrl_time_hms: '',
+                                ctrl_time_min: 0,
+                                ctrl_dist_m: 5000,
+                                ctrl_elev: 100,
+                                segments: [],
+                                _first_seg: seg  // Pro zpětný výpočet tempa
+                            };
+                        }
+                        reconstructed[seg.runner].segments.push(seg.id);
+                    }
+                });
+                
+                // Zpětný výpočet kontrolního času z prvního úseku běžce
+                // Logika: pace = planned_duration / eq_dist, ctrl_time = pace * ctrl_eq_dist
+                Object.values(reconstructed).forEach(r => {
+                    const seg = r._first_seg;
+                    if (seg && seg.planned_duration_min && seg.dist > 0) {
+                        const segEqDist = seg.dist + (seg.elev_up / 100.0);
+                        if (segEqDist > 0) {
+                            const paceMinPerKm = seg.planned_duration_min / segEqDist;
+                            const ctrlEqDist = (r.ctrl_dist_m / 1000.0) + (r.ctrl_elev / 100.0);
+                            const ctrlTimeMin = paceMinPerKm * ctrlEqDist;
+                            r.ctrl_time_min = ctrlTimeMin;
+                            const h = Math.floor(ctrlTimeMin / 60);
+                            const m = Math.floor(ctrlTimeMin % 60);
+                            const s = Math.round((ctrlTimeMin % 1) * 60);
+                            r.ctrl_time_hms = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+                        }
+                    }
+                    delete r._first_seg;
+                });
+                
+                runnersData = Object.values(reconstructed);
+            }
+
+            let runnerFactors = {};
+
+            // --- SYNCHRONIZACE SE SERVEREM ---
+            async function pushUpdateToServer(idx, isDone, actualTime) {
+                try {
+                    await fetch(`/api/race/${RACE_ID}/update`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ index: idx, is_done: isDone, actual_time: actualTime })
+                    });
+                } catch (e) { console.error("Chyba při ukládání na server", e); }
+            }
+
+            async function pollServer() {
+                try {
+                    let res = await fetch(`/api/race/${RACE_ID}`);
+                    if (!res.ok) return;
+                    let data = await res.json();
+                    let needRecalc = false;
+
+                    data.segments.forEach((seg, i) => {
+                        let box = document.getElementById(`seg-${i}`);
+                        let chk = box.querySelector('.status-check input');
+                        let inp = box.querySelector('.actual-time-input');
+                        let inputWrap = box.querySelector('.actual-input-wrap');
+
+                        // Ošetření starých záznamů v databázi, kde chybí hodnoty
+                        let serverIsDone = seg.is_done || false;
+                        let serverTime = seg.actual_time || "";
+
+                        // Pokud se data ze serveru liší od lokálních, aktualizuj DOM
+                        if (chk.checked !== serverIsDone || inp.value !== serverTime) {
+                            chk.checked = serverIsDone;
+                            inp.value = serverTime;
+                            inputWrap.style.display = serverIsDone ? 'block' : 'none';
+                            needRecalc = true;
+                        }
+                    });
+                    if (needRecalc) recalculateAll();
+                } catch (e) { console.error("Chyba synchronizace", e); }
+            }
+
+            // Spustí kontrolu nových dat každých 10 sekund
+            setInterval(pollServer, 10000);
+
+            // --- LOKÁLNÍ FUNKCE ---
+
+            // Nová pomocná funkce pro formátování do HH:MM:SS (pro input)
+            function formatHMS(totalMin) {
+                let h = Math.floor(totalMin / 60);
+                let m = Math.floor(totalMin % 60);
+                let s = Math.round((totalMin % 1) * 60);
+                return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+            }
+
+            function toggleDone(idx, cb) {
+                const box = document.getElementById(`seg-${idx}`);
+                const inputWrap = box.querySelector('.actual-input-wrap');
+                const inputEl = box.querySelector('.actual-time-input');
+
+                inputWrap.style.display = cb.checked ? 'block' : 'none';
+
+                // Předvyplnění použije dynamicky predikovaný čas (včetně zpoždění/zrychlení běžce)
+                if (cb.checked && (!inputEl.value || inputEl.value === 'undefined')) {
+                    const predictedMin = parseFloat(box.dataset.predictedMin || box.dataset.plannedMin);
+                    inputEl.value = formatHMS(predictedMin);
+                }
+
+                let actualTime = inputEl.value;
+                pushUpdateToServer(idx, cb.checked, actualTime);
+                recalculateAll();
+            }
+
+            function saveTimeInput(idx, inputEl) {
+                const box = document.getElementById(`seg-${idx}`);
+                const isDone = box.querySelector('.status-check input').checked;
+                pushUpdateToServer(idx, isDone, inputEl.value); // Uloží na server po dopsání
+                recalculateAll();
+            }
+
+            function parseHMS(s) {
+                let p = s.split(':').map(v => parseFloat(v) || 0);
+                if (p.length === 3) return p[0] * 60 + p[1] + p[2] / 60;
+                if (p.length === 2) return p[0] * 60 + p[1];
+                return 0;
+            }
+
+            function formatHM(totalMin) {
+                let h = Math.floor(totalMin / 60);
+                let m = Math.floor(totalMin % 60);
+                return `${h}h ${m.toString().padStart(2, '0')}m`;
+            }
+
+            function formatTime(date) {
+                return date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
+            }
+
+            function formatDiff(diffMinutes) {
+                let diffSec = diffMinutes * 60;
+                let sign = diffSec >= 0 ? '+' : '-';
+                let absSec = Math.abs(Math.round(diffSec));
+                let h = Math.floor(absSec / 3600).toString().padStart(2, '0');
+                let m = Math.floor((absSec % 3600) / 60).toString().padStart(2, '0');
+                let s = (absSec % 60).toString().padStart(2, '0');
+                return `${sign}${h}:${m}:${s}`;
+            }
+
+            function recalculateAll() {
+                let currentTime = new Date(START_ISO);
+                document.getElementById('total-start-time').innerText = formatTime(currentTime);
+
+                let totalMin = 0;
+                runnerFactors = {};
+
+                const boxes = document.querySelectorAll('.segment-box');
+                boxes.forEach((box, i) => {
+                    const runner = box.dataset.runner;
+                    const plannedMin = parseFloat(box.dataset.plannedMin);
+                    const isDone = box.querySelector('.status-check input').checked;
+                    const actualInput = box.querySelector('.actual-time-input').value;
+
+                    let duration = plannedMin;
+
+                    // Zohlednění předchozího výkonu TOHOTO konkrétního běžce
+                    if (!isDone && runnerFactors[runner]) {
+                        duration *= runnerFactors[runner];
+                    }
+
+                    // OPRAVA: Uložíme si predikovaný čas do boxu, aby si ho toggleDone mohlo po kliknutí vzít
+                    box.dataset.predictedMin = duration;
+
+                    if (isDone && actualInput.includes(':')) {
+                        duration = parseHMS(actualInput);
+                        // Výpočet nového koeficientu POUZE pro tohoto běžce
+                        runnerFactors[runner] = duration / plannedMin;
+
+                        let diff = duration - plannedMin;
+                        let diffTag = box.querySelector('.diff-tag');
+                        diffTag.innerText = `(${formatDiff(diff)})`;
+                        diffTag.style.color = diff > 0 ? '#ef4444' : '#10b981';
+                    } else {
+                        box.querySelector('.diff-tag').innerText = '';
+                    }
+
+                    box.querySelector('.start-time-text').innerText = `Start ${formatTime(currentTime)}`;
+                    let labelType = isDone && actualInput.includes(':') ? 'zaběhnuto' : 'odhad';
+                    box.querySelector('.duration-text').innerText = `${labelType} ${formatHM(duration)}`;
+
+                    let pace = duration / parseFloat(segmentsData[i].dist);
+                    box.querySelector('.pace-val').innerText = `${Math.floor(pace)}:${Math.floor((pace % 1) * 60).toString().padStart(2, '0')} /km`;
+
+                    currentTime = new Date(currentTime.getTime() + duration * 60000);
+                    box.querySelector('.eta-text strong').innerText = formatTime(currentTime);
+                    totalMin += duration;
+                });
+
+                document.getElementById('total-duration').innerText = formatHM(totalMin);
+                document.getElementById('total-finish-time').innerText = formatTime(currentTime);
+            }
+
+            // --- NASTAVENÍ ZÁVODU (MODAL) ---
+            function openSettingsModal() {
+                document.getElementById('settingsModal').style.display = 'block';
+            }
+
+            function closeSettingsModal() {
+                document.getElementById('settingsModal').style.display = 'none';
+            }
+
+            async function saveGeneralSettings() {
+                const newName = document.getElementById('editRaceName').value;
+                const newStart = document.getElementById('editStartTime').value;
+
+                try {
+                    let res = await fetch(`/api/race/${RACE_ID}/edit_settings`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            race_name: newName,
+                            start_iso: newStart,
+                            runners: runnersData
+                        })
+                    });
+
+                    let data = await res.json();
+                    if (data.status === 'success') {
+                        window.location.reload();
+                    } else {
+                        alert("Chyba při ukládání: " + (data.error || "Neznámá chyba"));
+                    }
+                } catch (e) {
+                    alert("Nepodařilo se uložit změny.");
+                    console.error(e);
+                }
+            }
+
+            // --- POSTRANNÍ PANEL (SIDEBAR) BĚŽCŮ ---
+            function openSidebar() {
+                const sidebar = document.getElementById('runnerSidebar');
+                const list = document.getElementById('sidebarRunnersList');
+                list.innerHTML = '';
+
+                if (!runnersData || runnersData.length === 0) {
+                    list.innerHTML = '<p style="font-size:0.9rem; color:var(--text-muted);">Tým je prázdný. Nikdo nebyl přiřazen.</p>';
+                } else {
+                    runnersData.forEach((r, idx) => {
+                        const div = document.createElement('div');
+                        div.className = 'sidebar-runner-item';
+
+                        const colorCircle = `<span style="display:inline-block; width:12px; height:12px; border-radius:50%; background-color:${r.color};"></span>`;
+
+                        // Statistiky běžce
+                        let totalDist = 0, totalUp = 0, totalDown = 0, totalDiff = 0, diffCount = 0;
+                        (r.segments || []).forEach(segId => {
+                            const s = segmentsData.find(x => x.id === segId);
+                            if (s) {
+                                totalDist += s.dist || 0;
+                                totalUp += s.elev_up || 0;
+                                totalDown += s.elev_down || 0;
+                                if (s.difficulty) {
+                                    totalDiff += parseFloat(s.difficulty) || 0;
+                                    diffCount++;
+                                }
+                            }
+                        });
+                        const avgDiff = diffCount > 0 ? (totalDiff / diffCount).toFixed(1) : '-';
+
+                        // Kontrolní čas – kompatibilita se staršími verzemi
+                        const ctrlTime = r.ctrl_time_hms || (r.ctrl_time_min ? formatHMS(r.ctrl_time_min) : '-');
+
+                        div.innerHTML = `
+                            <div class="sidebar-runner-header">
+                                <span>${colorCircle} Běžec ${idx + 1}: ${r.name}</span>
+                                <button class="sidebar-runner-edit-btn" onclick="toggleRunnerEdit(${idx})">✏️</button>
+                            </div>
+                            <div style="padding: 8px 15px; font-size: 0.85rem; color: var(--text-muted); border-bottom: 1px solid var(--border-color);">
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; margin-bottom: 6px;">
+                                    <span>📏 <strong>${totalDist.toFixed(1)} km</strong></span>
+                                    <span>↗ <strong>${Math.round(totalUp)} m</strong></span>
+                                    <span>↘ <strong>${Math.round(totalDown)} m</strong></span>
+                                    <span>⭐ <strong>${avgDiff}/5</strong></span>
+                                </div>
+                                <div style="font-size: 0.8rem;">⏱️ Kontrolní čas: <strong>${ctrlTime}</strong> · ${r.segments ? r.segments.length : 0} úseků</div>
+                            </div>
+                            <div class="sidebar-runner-form" id="sidebar_form_${idx}">
+                                <div class="form-group">
+                                    <label>Jméno</label>
+                                    <input type="text" id="sb_r_name_${idx}" value="${r.name}">
+                                </div>
+                                <div class="form-group">
+                                    <label>Čas kontr. úseku (HH:MM:SS)</label>
+                                    <input type="text" id="sb_r_time_${idx}" value="${ctrlTime !== '-' ? ctrlTime : ''}" pattern="[0-9]{1,2}:[0-9]{2}:[0-9]{2}">
+                                </div>
+                                <div class="form-group">
+                                    <label>Úseky (čárkou oddělená čísla)</label>
+                                    <input type="text" id="sb_r_segs_${idx}" value="${r.segments.join(', ')}">
+                                </div>
+                                <button class="btn btn-primary" style="margin-top: 10px; width: 100%; padding: 0.5rem;" onclick="saveRunner(${idx})">Uložit běžce</button>
+                            </div>
+                        `;
+                        list.appendChild(div);
+                    });
+                }
+                sidebar.classList.add('open');
+            }
+
+            function closeSidebar() {
+                document.getElementById('runnerSidebar').classList.remove('open');
+                document.getElementById('segmentsDropdown').classList.remove('active');
+            }
+
+            function toggleDropdown() {
+                document.getElementById('segmentsDropdown').classList.toggle('active');
+            }
+
+            function toggleRunnerEdit(idx) {
+                document.getElementById(`sidebar_form_${idx}`).classList.toggle('active');
+            }
+
+            async function saveRunner(idx) {
+                let updatedRunners = JSON.parse(JSON.stringify(runnersData || []));
+
+                updatedRunners[idx].name = document.getElementById(`sb_r_name_${idx}`).value;
+                updatedRunners[idx].ctrl_time_hms = document.getElementById(`sb_r_time_${idx}`).value;
+
+                let segsStr = document.getElementById(`sb_r_segs_${idx}`).value;
+                let segsArr = segsStr.split(',').map(s => parseInt(s.trim())).filter(s => !isNaN(s));
+                updatedRunners[idx].segments = segsArr;
+
+                try {
+                    let res = await fetch(`/api/race/${RACE_ID}/edit_settings`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            runners: updatedRunners
+                        })
+                    });
+
+                    let data = await res.json();
+                    if (data.status === 'success') {
+                        window.location.reload();
+                    } else {
+                        alert("Chyba při ukládání běžce: " + (data.error || "Neznámá chyba"));
+                    }
+                } catch (e) {
+                    alert("Nepodařilo se uložit běžce.");
+                    console.error(e);
+                }
+            }
+
+            // --- NÁHODNÉ GENEROVÁNÍ A ANALÝZA ---
+            let tempGeneratedRunners = [];
+
+            function pickRandomUnused(minRange, maxRange, usedSet) {
+                let available = [];
+                for (let i = minRange; i <= maxRange; i++) {
+                    if (!usedSet.has(i)) available.push(i);
+                }
+                if (available.length > 0) {
+                    const picked = available[Math.floor(Math.random() * available.length)];
+                    usedSet.add(picked);
+                    return picked;
+                }
+                for (let i = 1; i <= segmentsData.length; i++) {
+                    if (!usedSet.has(i)) {
+                        usedSet.add(i);
+                        return i;
+                    }
+                }
+                return null;
+            }
+
+            function generateRandomSegments() {
+                document.getElementById('segmentsDropdown').classList.remove('active');
+
+                if (!runnersData || runnersData.length === 0) {
+                    alert("Nejsou přiřazeni žádní běžci!");
+                    return;
+                }
+
+                const totalSegments = segmentsData.length;
+                let usedSet = new Set();
+
+                // Deep copy
+                tempGeneratedRunners = JSON.parse(JSON.stringify(runnersData));
+
+                tempGeneratedRunners.forEach(runner => {
+                    const segCount = runner.segments.length;
+                    runner.segments = []; // Vyprázdnit
+
+                    if (segCount > 0 && totalSegments > 0) {
+                        const intervalSize = totalSegments / segCount;
+                        for (let k = 0; k < segCount; k++) {
+                            const minRange = Math.floor(k * intervalSize) + 1;
+                            const maxRange = k === segCount - 1 ? totalSegments : Math.floor((k + 1) * intervalSize);
+                            const picked = pickRandomUnused(minRange, maxRange, usedSet);
+                            if (picked !== null) runner.segments.push(picked);
+                        }
+                        runner.segments.sort((a, b) => a - b);
+                    }
+                });
+
+                showAnalysisModal();
+            }
+
+            function showAnalysisModal() {
+                const modal = document.getElementById('analysisModal');
+                const body = document.getElementById('analysisModalBody');
+
+                body.innerHTML = `
+                    <div id="analysisCardsContainer" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;"></div>
+                    <hr style="border-top: 1px solid var(--border-color); margin: 20px 0;">
+
+                    <h4 style="margin-top: 0;">Ruční úprava přiřazení (drag & drop alternativa)</h4>
+                    <div id="analysisSegmentsGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px;"></div>
+                `;
+
+                renderAnalysisCards();
+                renderAnalysisGrid();
+
+                modal.style.display = 'block';
+            }
+
+            function renderAnalysisCards() {
+                const container = document.getElementById('analysisCardsContainer');
+                container.innerHTML = '';
+
+                tempGeneratedRunners.forEach((runner, idx) => {
+                    let dist = 0;
+                    let elevUp = 0;
+                    let elevDown = 0;
+
+                    runner.segments.sort((a, b) => a - b);
+
+                    runner.segments.forEach(segId => {
+                        const s = segmentsData.find(x => x.id === segId);
+                        if (s) {
+                            dist += s.dist;
+                            elevUp += s.elev_up;
+                            elevDown += s.elev_down;
+                        }
+                    });
+
+                    const div = document.createElement('div');
+                    div.className = 'analysis-card';
+
+                    const colorCircle = `<span style="display:inline-block; width:12px; height:12px; border-radius:50%; background-color:${runner.color};"></span>`;
+
+                    div.innerHTML = `
+                        <h4 style="margin:0 0 12px 0; display:flex; align-items:center; gap:8px;">${colorCircle} Běžec ${idx + 1}: ${runner.name}</h4>
+                        <div class="analysis-grid">
+                            <div class="a-col"><span class="a-lbl">Nové úseky</span><span class="a-val" style="font-size:1.1rem;">${runner.segments.join(', ') || '-'}</span></div>
+                            <div class="a-col"><span class="a-lbl">Vzdálenost</span><span class="a-val">${dist.toFixed(1)} km</span></div>
+                            <div class="a-col"><span class="a-lbl">Nastoupá</span><span class="a-val" style="color:var(--primary);">${Math.round(elevUp)} m</span></div>
+                            <div class="a-col"><span class="a-lbl">Naklesá</span><span class="a-val" style="color:#10b981;">${Math.round(elevDown)} m</span></div>
+                        </div>
+                    `;
+                    container.appendChild(div);
+                });
+            }
+
+            function renderAnalysisGrid() {
+                const container = document.getElementById('analysisSegmentsGrid');
+                container.innerHTML = '';
+
+                segmentsData.forEach((s) => {
+                    const div = document.createElement('div');
+                    div.style.border = "1px solid var(--border-color)";
+                    div.style.padding = "10px";
+                    div.style.borderRadius = "6px";
+                    div.style.background = "var(--bg-card)";
+
+                    let currentRunnerIdx = -1;
+                    tempGeneratedRunners.forEach((r, idx) => {
+                        if (r.segments.includes(s.id)) currentRunnerIdx = idx;
+                    });
+
+                    let options = tempGeneratedRunners.map((r, idx) => {
+                        let sel = (idx === currentRunnerIdx) ? 'selected' : '';
+                        return `<option value="${idx}" ${sel}>${r.name}</option>`;
+                    }).join('');
+
+                    div.innerHTML = `
+                        <div style="font-size: 0.85rem; font-weight: bold; margin-bottom: 5px; color: var(--text-color);">Úsek ${s.id} <span style="font-weight: normal;">(${s.dist}km, ↗${s.elev_up}m)</span></div>
+                        <select style="width: 100%; padding: 4px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-color);" onchange="changeSegmentRunner(${s.id}, this.value)">
+                            <option value="-1">Nikdo</option>
+                            ${options}
+                        </select>
+                    `;
+                    container.appendChild(div);
+                });
+            }
+
+            function changeSegmentRunner(segmentId, newRunnerIdxStr) {
+                const newRunnerIdx = parseInt(newRunnerIdxStr);
+
+                tempGeneratedRunners.forEach(r => {
+                    r.segments = r.segments.filter(id => id !== segmentId);
+                });
+
+                if (newRunnerIdx >= 0) {
+                    tempGeneratedRunners[newRunnerIdx].segments.push(segmentId);
+                }
+
+                renderAnalysisCards();
+            }
+
+            function closeAnalysisModal() {
+                document.getElementById('analysisModal').style.display = 'none';
+            }
+
+            async function applyGeneratedSegments() {
+                try {
+                    let res = await fetch(`/api/race/${RACE_ID}/edit_settings`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            runners: tempGeneratedRunners
+                        })
+                    });
+
+                    let data = await res.json();
+                    if (data.status === 'success') {
+                        window.location.reload();
+                    } else {
+                        alert("Chyba při ukládání: " + (data.error || "Neznámá chyba"));
+                    }
+                } catch (e) {
+                    alert("Nepodařilo se uložit rozlosování.");
+                    console.error(e);
+                }
+            }
+
+            // --- POKROČILÉ GENEROVÁNÍ S PRAVIDLY ---
+            function openSmartGenModal() {
+                document.getElementById('segmentsDropdown').classList.remove('active');
+                if (!runnersData || runnersData.length === 0) {
+                    alert("Nejsou přiřazeni žádní běžci!");
+                    return;
+                }
+                updateSmartGenUI();
+                document.getElementById('smartGenModal').style.display = 'block';
+            }
+
+            function closeSmartGenModal() {
+                document.getElementById('smartGenModal').style.display = 'none';
+            }
+
+            function updateSmartGenUI() {
+                const hasCentral = document.getElementById('sgHasCentral').checked;
+                const prefContainer = document.getElementById('sgPreferredPeopleContainer');
+                const carFormsContainer = document.getElementById('sgCarFormsContainer');
+                const usePreferred = document.getElementById('sgUsePreferred').checked;
+
+                if (hasCentral) {
+                    prefContainer.style.display = 'none';
+                } else {
+                    prefContainer.style.display = 'block';
+                    if (usePreferred) {
+                        carFormsContainer.style.display = 'flex';
+                        generateCarForms();
+                    } else {
+                        carFormsContainer.style.display = 'none';
+                    }
+                }
+            }
+
+            function generateCarForms() {
+                const carCount = parseInt(document.getElementById('sgCarCount').value) || 1;
+                const container = document.getElementById('sgCarFormsContainer');
+                container.innerHTML = '';
+
+                // Zobrazení běžců jako checkboxů pro každé auto
+                for (let i = 0; i < carCount; i++) {
+                    let div = document.createElement('div');
+                    div.style.border = "1px solid var(--border-color)";
+                    div.style.padding = "10px";
+                    div.style.borderRadius = "6px";
+                    div.style.background = "var(--bg-card)";
+
+                    let html = `<h4 style="margin-top:0; margin-bottom:10px;">Auto ${i + 1}</h4><div style="display: flex; flex-wrap: wrap; gap: 10px;">`;
+                    runnersData.forEach((r, idx) => {
+                        html += `<label style="display:flex; align-items:center; gap:5px; font-size:0.9rem; font-weight:normal; cursor:pointer;">
+                            <input type="checkbox" name="car_${i}_runner" value="${idx}" style="width:auto;"> ${r.name}
+                        </label>`;
+                    });
+                    html += `</div>`;
+                    div.innerHTML = html;
+                    container.appendChild(div);
+                }
+            }
+
+            async function runSmartGeneration() {
+                const btn = document.querySelector('#smartGenModal .btn-primary');
+                const originalText = btn.innerText;
+
+                const minPause = parseInt(document.getElementById('sgMinPause').value) || 0;
+                const carCount = parseInt(document.getElementById('sgCarCount').value) || 1;
+                const hasCentral = document.getElementById('sgHasCentral').checked;
+                const usePreferred = document.getElementById('sgUsePreferred').checked && !hasCentral;
+
+                let cars = [];
+                let runners = JSON.parse(JSON.stringify(runnersData)); // Deep copy
+                runners.forEach(r => {
+                    r.target_count = r.segments ? r.segments.length : 0;
+                    r.segments = []; // Reset pro novou generaci
+                });
+
+                if (usePreferred) {
+                    let assigned = new Set();
+                    let error = false;
+                    let totalAssigned = 0;
+                    for (let i = 0; i < carCount; i++) {
+                        let carRunners = [];
+                        let checkboxes = document.querySelectorAll(`input[name="car_${i}_runner"]:checked`);
+                        checkboxes.forEach(cb => {
+                            let idx = parseInt(cb.value);
+                            if (assigned.has(idx)) error = true;
+                            carRunners.push(idx);
+                            assigned.add(idx);
+                            totalAssigned++;
+                        });
+                        cars.push(carRunners);
+                    }
+                    if (error || totalAssigned !== runners.length) {
+                        alert("Každý běžec z týmu musí být přiřazen přesně do jednoho auta.");
+                        return;
+                    }
+                } else {
+                    for (let i = 0; i < carCount; i++) cars.push([]);
+                    runners.forEach((r, idx) => {
+                        cars[idx % carCount].push(idx);
+                    });
+                }
+
+                btn.innerText = 'Načítání (řeším model)...';
+                btn.disabled = true;
+
+                try {
+                    let res = await fetch(`/api/race/${RACE_ID}/smart_generate_ilp`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            runners: runners,
+                            min_pause: minPause,
+                            car_count: carCount,
+                            has_central: hasCentral,
+                            cars: cars
+                        })
+                    });
+
+                    let data = await res.json();
+
+                    if (data.status === 'success') {
+                        let assignment = data.assignment;
+                        assignment.forEach((runnerIdx, segmentIdx) => {
+                            // +1 protoze segmenty jsou obvykle 1-indexed (nebo jen ulozime s+1)
+                            runners[runnerIdx].segments.push(segmentIdx + 1);
+                        });
+                        tempGeneratedRunners = runners;
+                        closeSmartGenModal();
+                        showAnalysisModal();
+                    } else {
+                        alert("Chyba při generování: " + (data.message || data.error));
+                    }
+                } catch (e) {
+                    alert("Nepodařilo se spojit se serverem.");
+                    console.error(e);
+                } finally {
+                    btn.innerText = originalText;
+                    btn.disabled = false;
+                }
+            }
+
+            // Zavření modalu nebo sidebaru kliknutím mimo něj
+            window.onclick = function (event) {
+                const modal = document.getElementById('settingsModal');
+                const analysisModal = document.getElementById('analysisModal');
+                const smartGenModal = document.getElementById('smartGenModal');
+                const logisticsModal = document.getElementById('logisticsModal');
+                const dropdown = document.getElementById('segmentsDropdown');
+
+                if (event.target == modal) {
+                    modal.style.display = "none";
+                }
+
+                if (event.target == analysisModal) {
+                    analysisModal.style.display = "none";
+                }
+
+                if (event.target == smartGenModal) {
+                    smartGenModal.style.display = "none";
+                }
+
+                if (event.target == logisticsModal) {
+                    logisticsModal.style.display = "none";
+                }
+
+                // Zavřít dropdown, pokud se klikne mimo
+                if (dropdown && dropdown.classList.contains('active')) {
+                    if (!dropdown.contains(event.target)) {
+                        dropdown.classList.remove('active');
+                    }
+                }
+            }
+
+            window.onload = recalculateAll;
+        </script>
+        {% endif %}
+    </main>
+
+    <script>
+        // --- Light / Dark Mode Toggle ---
+        const themeToggleBtn = document.getElementById('themeToggle');
+        const currentTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', currentTheme);
+
+        themeToggleBtn.addEventListener('click', () => {
+            let theme = document.documentElement.getAttribute('data-theme');
+            let newTheme = theme === 'light' ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+        });
+
+        // --- Logika pro přidávání běžců v Kroku 2 ---
+
+        function addRunner(index) {
+            const div = document.createElement('div');
+            div.className = 'runner-card';
+            div.innerHTML = `
+                <div class="r-header"><h4>Běžec ${index}</h4></div>
+                <div class="runner-inputs">
+                    <div><label>Jméno</label><input type="text" class="r-name" required></div>
+                    <div class="r-dist-wrapper"><label>Délka kontr. (metry)</label><input type="number" class="r-dist" placeholder="např. 5000" required></div>
+                    <div><label>Čas (HH:MM:SS)</label><input type="text" class="r-time" pattern="[0-9]{1,2}:[0-9]{2}:[0-9]{2}" placeholder="00:25:30" title="Formát HH:MM:SS" required></div>
+                    <div class="r-elev-wrapper"><label>Převýšení (m)</label><input type="number" class="r-elev" required></div>
+                    <div><label>Počet úseků</label><input type="number" class="r-seg-count" min="1" onchange="generateSegmentFields(this)" required></div>
+                </div>
+                <div style="margin-bottom: 15px; margin-top: 5px;">
+                    <label style="display: flex; align-items: center; gap: 8px; font-weight: 500; font-size: 0.9rem; cursor: pointer;">
+                        <input type="checkbox" class="r-random-segs" onchange="toggleRandomSegments(this)" style="width: auto;">
+                        Neznám ještě čísla úseků (vybrat náhodně)
+                    </label>
+                </div>
+                <div class="seg-inputs"></div>
+            `;
+            document.getElementById('runnersContainer').appendChild(div);
+
+            // Zohlednit aktuální stav globálního zaškrtávátka
+            const isGlobal = document.getElementById('globalControlCheck') ? document.getElementById('globalControlCheck').checked : false;
+            if (isGlobal) {
+                div.querySelector('.r-dist-wrapper').style.display = 'none';
+                div.querySelector('.r-elev-wrapper').style.display = 'none';
+                div.querySelector('.r-dist').required = false;
+                div.querySelector('.r-elev').required = false;
+            }
+        }
+
+        function generateRunners(count) {
+            count = parseInt(count) || 1;
+            const container = document.getElementById('runnersContainer');
+            const currentCount = container.children.length;
+
+            if (count > currentCount) {
+                for (let i = currentCount; i < count; i++) {
+                    addRunner(i + 1);
+                }
+            } else if (count < currentCount) {
+                for (let i = currentCount; i > count; i--) {
+                    container.lastElementChild.remove();
+                }
+            }
+        }
+
+        function toggleGlobalControl(isChecked) {
+            const globalInputs = document.getElementById('globalControlInputs');
+            globalInputs.style.display = isChecked ? 'flex' : 'none';
+            const distInput = document.getElementById('globalControlDist');
+            const elevInput = document.getElementById('globalControlElev');
+            if (distInput) distInput.required = isChecked;
+            if (elevInput) elevInput.required = isChecked;
+
+            document.querySelectorAll('.runner-card').forEach(card => {
+                const distWrap = card.querySelector('.r-dist-wrapper');
+                const elevWrap = card.querySelector('.r-elev-wrapper');
+                distWrap.style.display = isChecked ? 'none' : 'block';
+                elevWrap.style.display = isChecked ? 'none' : 'block';
+                card.querySelector('.r-dist').required = !isChecked;
+                card.querySelector('.r-elev').required = !isChecked;
+            });
+        }
+
+        function toggleRandomSegments(checkbox) {
+            const segContainer = checkbox.closest('.runner-card').querySelector('.seg-inputs');
+            segContainer.style.display = checkbox.checked ? 'none' : 'flex';
+            // Zrušíme povinnost, pokud je kontejner schovaný
+            segContainer.querySelectorAll('.r-seg-id').forEach(inp => {
+                inp.required = !checkbox.checked;
+            });
+        }
+
+        function generateSegmentFields(inputEl) {
+            const count = parseInt(inputEl.value) || 0;
+            const card = inputEl.closest('.runner-card');
+            const container = card.querySelector('.seg-inputs');
+            const isRandom = card.querySelector('.r-random-segs').checked;
+
+            container.innerHTML = '<label style="width:100%; display:block; margin-bottom:5px; font-size:0.85rem;">Čísla úseků (např. 1, 13, 25):</label>';
+            for (let i = 0; i < count; i++) {
+                const inp = document.createElement('input');
+                inp.type = 'number';
+                inp.className = 'r-seg-id';
+                inp.placeholder = `${i + 1}. úsek`;
+                inp.required = !isRandom;
+                container.appendChild(inp);
+            }
+        }
+
+        function prepareSubmit(e) {
+            const runners = [];
+            const globalCheck = document.getElementById('globalControlCheck');
+            const isGlobalControl = globalCheck ? globalCheck.checked : false;
+            const globalDist = parseFloat(document.getElementById('globalControlDist') ? document.getElementById('globalControlDist').value : 0);
+            const globalElev = parseFloat(document.getElementById('globalControlElev') ? document.getElementById('globalControlElev').value : 0);
+
+            // Posbírat ručně vybrané úseky
+            const manualSelectedSegs = new Set();
+            document.querySelectorAll('.runner-card').forEach(card => {
+                const isRandom = card.querySelector('.r-random-segs').checked;
+                if (!isRandom) {
+                    card.querySelectorAll('.r-seg-id').forEach(inp => {
+                        const val = parseInt(inp.value);
+                        if (!isNaN(val)) manualSelectedSegs.add(val);
+                    });
+                }
+            });
+
+            // Proměnná z šablony Flasku
+            const totalSegments = {{ segment_count|default (0)
+        }};
+
+        // Pomocná funkce pro výběr náhodného úseku ze zadaného intervalu
+        function pickRandomUnused(minRange, maxRange, usedSet) {
+            let available = [];
+            for (let i = minRange; i <= maxRange; i++) {
+                if (!usedSet.has(i)) available.push(i);
+            }
+            if (available.length > 0) {
+                const picked = available[Math.floor(Math.random() * available.length)];
+                usedSet.add(picked);
+                return picked;
+            }
+            // Fallback: Pokud v intervalu není nic volného, vyber cokoliv z celku
+            for (let i = 1; i <= totalSegments; i++) {
+                if (!usedSet.has(i)) {
+                    usedSet.add(i);
+                    return i;
+                }
+            }
+            return null;
+        }
+
+        document.querySelectorAll('.runner-card').forEach(card => {
+            const isRandom = card.querySelector('.r-random-segs').checked;
+            let segs = [];
+            const segCount = parseInt(card.querySelector('.r-seg-count').value) || 0;
+
+            if (!isRandom) {
+                segs = Array.from(card.querySelectorAll('.r-seg-id'))
+                    .map(inp => parseInt(inp.value))
+                    .filter(v => !isNaN(v));
+            } else {
+                // Náhodné rozdělení s ohledem na počet dílů (třetiny, čtvrtiny atd.)
+                if (segCount > 0 && totalSegments > 0) {
+                    const intervalSize = totalSegments / segCount;
+                    for (let k = 0; k < segCount; k++) {
+                        const minRange = Math.floor(k * intervalSize) + 1;
+                        const maxRange = k === segCount - 1 ? totalSegments : Math.floor((k + 1) * intervalSize);
+                        const picked = pickRandomUnused(minRange, maxRange, manualSelectedSegs);
+                        if (picked !== null) segs.push(picked);
+                    }
+                }
+            }
+
+            runners.push({
+                name: card.querySelector('.r-name').value,
+                ctrl_dist_m: isGlobalControl ? globalDist : parseFloat(card.querySelector('.r-dist').value),
+                ctrl_elev: isGlobalControl ? globalElev : parseFloat(card.querySelector('.r-elev').value),
+                ctrl_time_hms: card.querySelector('.r-time').value,
+                segments: segs
+            });
+        });
+        document.getElementById('runnersDataInput').value = JSON.stringify(runners);
+        }
+
+        // Pokud jsme ve Step 2, rovnou vygenerujeme prvního běžce
+        if (document.getElementById('runnersContainer')) {
+            generateRunners(1);
+        }
+
+        async function confirmDeleteRace(raceId, raceName) {
+            if (confirm(`Opravdu chcete smazat závod "${raceName}"?`)) {
+                try {
+                    const response = await fetch(`/api/race/${raceId}/delete`, {
+                        method: 'POST'
+                    });
+                    const result = await response.json();
+                    if (result.status === 'success') {
+                        window.location.reload();
+                    } else {
+                        alert('Chyba při mazání závodu.');
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('Nepodařilo se smazat závod.');
+                }
+            }
+        }
+    </script>
+
+    <!-- Logistics Modal -->
+    <div id="logisticsModal" class="modal">
+        <div class="modal-content card-settings" style="max-width: 800px; width: 95%;">
+            <div class="modal-header">
+                <h3>🚗 Logistika aut</h3>
+                <span class="close" onclick="closeLogisticsModal()">&times;</span>
+            </div>
+            <div class="modal-body" style="max-height: 70vh; overflow-y: auto; padding-right: 10px;">
+                <!-- Stav 1: Uložená logistika (zobrazí se rovnou) -->
+                <div id="logisticsCachedView" style="display: none;">
+                    <div id="logisticsCachedResultContainer"></div>
+                    <div style="margin-top: 20px; text-align: center;">
+                        <button class="btn btn-outline" style="width: auto; padding: 0.5rem 1.5rem;" onclick="showLogisticsConfigForm()">🔄 Přepočítat logistiku</button>
+                    </div>
+                </div>
+
+                <!-- Stav 2: Konfigurační formulář -->
+                <div id="logisticsConfigView" style="display: none;">
+                    <div class="form-group" style="margin-bottom: 20px;">
+                        <label>Počet aut v týmu:</label>
+                        <input type="number" id="logisticsCarCount" value="2" min="1"
+                            style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color); box-sizing: border-box;">
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 20px;">
+                        <label style="display: flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
+                            <input type="checkbox" id="logisticsHasCentral" style="width: auto;" onchange="toggleCentralSegmentsUI()">
+                            <strong>Máme centrálu</strong>
+                        </label>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 5px; margin-left: 24px;">
+                            Algoritmus se pokusí chytře nasekat závod na různě velké výjezdy, abyste strávili na centrále co
+                            nejvíce klidného času bez přejíždění.
+                        </p>
+                    </div>
+
+                    <!-- Central segments configuration -->
+                    <div id="centralSegmentsConfig" style="display: none; margin-bottom: 20px; border-top: 1px solid var(--border-color); padding-top: 15px;">
+                        <label style="font-weight: 600; margin-bottom: 10px; display: block;">📍 Úseky začínající/končící v centrále</label>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 15px;">
+                            Označte úseky, které začínají nebo končí přímo v centrále. U těchto úseků se nemusí přejíždět – běžec vybíhá z centrály / dobíhá do centrály.
+                        </p>
+                        <div id="centralSegmentsGrid" style="max-height: 300px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; background: var(--bg-card, #fff);">
+                            <!-- JS vygeneruje seznam úseků -->
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary" style="width: 100%;" onclick="calculateLogistics()">Vypočítat a zobrazit
+                        logistiku</button>
+
+                    <div id="logisticsResultContainer" style="margin-top: 30px;">
+                        <!-- Zde se vygenerují výsledky po přepočtu -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Cached logistics data from server
+        let cachedLogisticsData = {{ logistics_data | tojson if logistics_data else 'null' }};
+        let cachedLogisticsConfig = cachedLogisticsData ? cachedLogisticsData.config : null;
+
+        function openLogisticsModal() {
+            const modal = document.getElementById('logisticsModal');
+            const cachedView = document.getElementById('logisticsCachedView');
+            const configView = document.getElementById('logisticsConfigView');
+
+            if (cachedLogisticsData && cachedLogisticsData.blocks && cachedLogisticsData.blocks.length > 0) {
+                // Máme uloženou logistiku – zobrazíme ji rovnou
+                cachedView.style.display = 'block';
+                configView.style.display = 'none';
+                renderLogisticsResult(cachedLogisticsData.blocks, 'logisticsCachedResultContainer', cachedLogisticsConfig);
+            } else {
+                // Nemáme logistiku – zobrazíme formulář
+                cachedView.style.display = 'none';
+                configView.style.display = 'block';
+            }
+
+            modal.style.display = 'block';
+        }
+
+        function showLogisticsConfigForm() {
+            const cachedView = document.getElementById('logisticsCachedView');
+            const configView = document.getElementById('logisticsConfigView');
+
+            cachedView.style.display = 'none';
+            configView.style.display = 'block';
+
+            // Předvyplníme z uložené konfigurace
+            if (cachedLogisticsConfig) {
+                document.getElementById('logisticsCarCount').value = cachedLogisticsConfig.car_count || 2;
+                document.getElementById('logisticsHasCentral').checked = cachedLogisticsConfig.has_central || false;
+                toggleCentralSegmentsUI();
+
+                // Předvyplníme checkboxy pro centrálové úseky
+                if (cachedLogisticsConfig.central_segments) {
+                    const startSegs = cachedLogisticsConfig.central_segments.start || [];
+                    const endSegs = cachedLogisticsConfig.central_segments.end || [];
+                    startSegs.forEach(id => {
+                        const cb = document.getElementById(`cs_start_${id}`);
+                        if (cb) cb.checked = true;
+                    });
+                    endSegs.forEach(id => {
+                        const cb = document.getElementById(`cs_end_${id}`);
+                        if (cb) cb.checked = true;
+                    });
+                }
+            }
+        }
+
+        function closeLogisticsModal() {
+            document.getElementById('logisticsModal').style.display = 'none';
+        }
+
+        function toggleCentralSegmentsUI() {
+            const hasCentral = document.getElementById('logisticsHasCentral').checked;
+            const container = document.getElementById('centralSegmentsConfig');
+            container.style.display = hasCentral ? 'block' : 'none';
+
+            if (hasCentral) {
+                generateCentralSegmentsGrid();
+            }
+        }
+
+        function generateCentralSegmentsGrid() {
+            const grid = document.getElementById('centralSegmentsGrid');
+            const segs = (typeof segmentsData !== 'undefined') ? segmentsData : [];
+            
+            if (segs.length === 0) {
+                grid.innerHTML = '<p style="color: var(--text-muted); font-size: 0.9rem;">Žádné úseky k zobrazení.</p>';
+                return;
+            }
+
+            let html = `
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid var(--border-color);">
+                            <th style="text-align: left; padding: 6px 8px; color: var(--text-muted); font-size: 0.8rem;">Úsek</th>
+                            <th style="text-align: center; padding: 6px 8px; color: var(--text-muted); font-size: 0.8rem;">Začíná v centrále</th>
+                            <th style="text-align: center; padding: 6px 8px; color: var(--text-muted); font-size: 0.8rem;">Končí v centrále</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            segs.forEach(s => {
+                html += `
+                    <tr style="border-bottom: 1px solid var(--border-color);">
+                        <td style="padding: 5px 8px; font-weight: 500;">${s.id}. ${s.name || ''}</td>
+                        <td style="text-align: center; padding: 5px 8px;">
+                            <input type="checkbox" id="cs_start_${s.id}" style="width: auto; cursor: pointer;">
+                        </td>
+                        <td style="text-align: center; padding: 5px 8px;">
+                            <input type="checkbox" id="cs_end_${s.id}" style="width: auto; cursor: pointer;">
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            grid.innerHTML = html;
+        }
+
+        function collectCentralSegments() {
+            const segs = (typeof segmentsData !== 'undefined') ? segmentsData : [];
+            const startIds = [];
+            const endIds = [];
+
+            segs.forEach(s => {
+                const startCb = document.getElementById(`cs_start_${s.id}`);
+                const endCb = document.getElementById(`cs_end_${s.id}`);
+                if (startCb && startCb.checked) startIds.push(s.id);
+                if (endCb && endCb.checked) endIds.push(s.id);
+            });
+
+            return { start: startIds, end: endIds };
+        }
+
+        async function calculateLogistics() {
+            const btn = document.querySelector('#logisticsConfigView .btn-primary');
+            const originalText = btn.innerText;
+            const carCount = parseInt(document.getElementById('logisticsCarCount').value) || 1;
+            const hasCentral = document.getElementById('logisticsHasCentral').checked;
+            const centralSegments = hasCentral ? collectCentralSegments() : {};
+            const container = document.getElementById('logisticsResultContainer');
+
+            btn.innerText = 'Počítám optimální rozložení...';
+            btn.disabled = true;
+            container.innerHTML = '';
+
+            try {
+                // Pozor, pokud jsme ve step==3, RACE_ID by mělo být definované v HTML.
+                // Ujistíme se, že můžeme ID závodu získat.
+                const raceId = typeof RACE_ID !== 'undefined' ? RACE_ID : window.location.pathname.split('/').pop();
+
+                let res = await fetch(`/api/race/${raceId}/logistics`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        runners: (typeof tempGeneratedRunners !== 'undefined' && tempGeneratedRunners.length > 0) ? tempGeneratedRunners : runnersData,
+                        car_count: carCount,
+                        has_central: hasCentral,
+                        central_segments: centralSegments
+                    })
+                });
+
+                let data = await res.json();
+                if (data.status === 'success') {
+                    const config = {
+                        car_count: carCount,
+                        has_central: hasCentral,
+                        central_segments: centralSegments
+                    };
+                    renderLogisticsResult(data.blocks, 'logisticsResultContainer', config);
+                    
+                    // Aktualizujeme lokální cache
+                    cachedLogisticsData = { blocks: data.blocks, config: config };
+                    cachedLogisticsConfig = config;
+                } else {
+                    alert("Chyba při výpočtu logistiky: " + (data.message || data.error));
+                }
+            } catch (e) {
+                alert("Nepodařilo se spojit se serverem.");
+                console.error(e);
+            } finally {
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        function renderLogisticsResult(blocks, containerId, config) {
+            const container = document.getElementById(containerId);
+            if (blocks.length === 0) {
+                container.innerHTML = '<p>Zatím nejsou přiděleny žádné úseky.</p>';
+                return;
+            }
+
+            const hasCentral = config && config.has_central;
+            const runnersForMapping = (typeof tempGeneratedRunners !== 'undefined' && tempGeneratedRunners.length > 0) ? tempGeneratedRunners : runnersData;
+            const getNames = (indices) => indices.map(idx => runnersForMapping[idx]?.name || 'Neznámý').join(', ');
+
+            let html = '<div style="display: flex; flex-direction: column; gap: 15px;">';
+
+            blocks.forEach((b, idx) => {
+                let startTime = "--:--";
+                let endTime = "--:--";
+
+                let startSegEl = document.getElementById(`seg-${b.start_seg - 1}`);
+                if (startSegEl) {
+                    let sTimeText = startSegEl.querySelector('.start-time-text')?.innerText;
+                    if (sTimeText) startTime = sTimeText.replace('Start ', '').trim();
+                }
+
+                let nextSegEl = document.getElementById(`seg-${b.end_seg}`);
+                if (nextSegEl) {
+                    let eTimeText = nextSegEl.querySelector('.start-time-text')?.innerText;
+                    if (eTimeText) endTime = eTimeText.replace('Start ', '').trim();
+                } else {
+                    endTime = document.getElementById('total-finish-time')?.innerText || "--:--";
+                }
+
+                let blockHtml = `
+                    <div style="background: var(--bg-card); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); border-left: 5px solid var(--primary);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <h4 style="margin: 0;">🚗 Auto ${b.car_num} <span style="font-weight: normal; font-size: 0.9rem;">(Výjezd ${idx + 1})</span></h4>
+                            <span style="background: var(--bg-body); padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; font-family: monospace;">⏱️ ${startTime} - ${endTime}</span>
+                        </div>
+                        <div style="font-size: 0.95rem; margin-bottom: 8px;"><strong>Úseky:</strong> ${b.start_seg} až ${b.end_seg}</div>
+                `;
+
+                if (hasCentral) {
+                    // Indikátory centrály
+                    let centralTags = '';
+                    if (b.first_starts_at_central) {
+                        centralTags += '<span style="display: inline-block; background: #10b981; color: white; font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; margin-right: 5px;">📍 Start z centrály</span>';
+                    }
+                    if (b.last_ends_at_central) {
+                        centralTags += '<span style="display: inline-block; background: #3b82f6; color: white; font-size: 0.75rem; padding: 2px 8px; border-radius: 4px;">📍 Doběh do centrály</span>';
+                    }
+                    if (centralTags) {
+                        blockHtml += `<div style="margin-bottom: 8px;">${centralTags}</div>`;
+                    }
+
+                    // Central mode: show outbound and returning
+                    blockHtml += `
+                        <div style="font-size: 0.9rem; margin-bottom: 4px;"><strong>Jedou z centrály:</strong> ${getNames(b.outbound) || '-'}</div>
+                        <div style="font-size: 0.9rem;"><strong>Vrací se na centrálu:</strong> ${getNames(b.returning) || '-'}</div>
+                    `;
+                } else {
+                    blockHtml += `
+                        <div style="font-size: 0.9rem;"><strong>Členové v autě:</strong> ${getNames(b.outbound) || '-'}</div>
+                    `;
+                }
+
+                blockHtml += `</div>`;
+                html += blockHtml;
+            });
+
+            html += '</div>';
+            container.innerHTML = html;
+        }
+    </script>
+</body>
+
+</html>
