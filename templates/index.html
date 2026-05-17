@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RelayRunPlanner</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/icon/RelayRunPlanner_150.png') }}">
 </head>
 
 <body>
@@ -13,7 +14,11 @@
          HLAVIČKA – název aplikace + přepínač motivu
          ============================================ -->
     <header>
-        <h1>🏃‍♂️ RelayRunPlanner</h1>
+        <h1 style="display: flex; align-items: center; gap: 10px;">
+            <img src="{{ url_for('static', filename='img/icon/RelayRunPlanner_150.png') }}" alt="RelayRunPlanner logo"
+                style="height: 32px; width: 32px; object-fit: contain;">
+            RelayRunPlanner
+        </h1>
         <div style="display: flex; align-items: center; gap: 8px;">
             <span style="font-weight: 600; font-size: 0.9rem; color: var(--text-muted);">Motiv</span>
             <button id="themeToggle" title="Přepnout motiv">🌓</button>
@@ -79,11 +84,31 @@
                 <!-- Upload JSON souboru s trasou -->
                 <div class="form-group upload-box">
                     <label>Nahrát trasu (JSON soubor):</label>
-                    <p class="hint">Nejprve si stáhni prázdnou šablonu pro {{ segment_count }} úseků, doplň data a
-                        nahraj ji zpět.</p>
-                    <a href="/sample/json/{{ segment_count }}" class="btn btn-outline">⬇️ Stáhnout prázdný JSON pro {{
-                        segment_count }} úseků</a>
-                    <input type="file" name="route_file" accept=".json" required style="margin-top: 15px;">
+                    <p class="hint">Nejprve si stáhni prázdnou šablonu pro {{ segment_count }} úseků, doplň ji a nahraj
+                        zpět.
+                        {% if segment_count in [15, 24, 36] %}
+                        Nebo si stáhni a uprav předvyplněný plán pro tento závod!
+                        {% endif %}
+                    </p>
+                    <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px;">
+                        <a href="/sample/json/{{ segment_count }}" class="btn btn-outline"
+                            style="width: auto; flex: 1; min-width: 250px; text-align: center;">⬇️ Stáhnout prázdný JSON
+                            ({{ segment_count }} úseků)</a>
+                        {% if segment_count == 15 %}
+                        <a href="/sample/prefilled/15" class="btn btn-outline"
+                            style="width: auto; flex: 1; min-width: 250px; border-color: var(--primary); color: var(--primary); font-weight: 600; text-align: center;">⬇️
+                            Použít JizeRun šablonu (15 úseků)</a>
+                        {% elif segment_count == 24 %}
+                        <a href="/sample/prefilled/24" class="btn btn-outline"
+                            style="width: auto; flex: 1; min-width: 250px; border-color: var(--primary); color: var(--primary); font-weight: 600; text-align: center;">⬇️
+                            Použít 250ČR šablonu (24 úseků)</a>
+                        {% elif segment_count == 36 %}
+                        <a href="/sample/prefilled/36" class="btn btn-outline"
+                            style="width: auto; flex: 1; min-width: 250px; border-color: var(--primary); color: var(--primary); font-weight: 600; text-align: center;">⬇️
+                            Použít Vltava Run šablonu (36 úseků)</a>
+                        {% endif %}
+                    </div>
+                    <input type="file" name="route_file" accept=".json" required>
                 </div>
 
                 <!-- Sekce pro hromadné nastavení kontrolního úseku -->
@@ -99,12 +124,12 @@
                     <div class="form-group" style="display: flex; align-items: center; gap: 10px; margin-bottom: 0;">
                         <input type="checkbox" id="globalControlCheck" onchange="toggleGlobalControl(this.checked)"
                             style="width: auto;">
-                        <label style="margin: 0;">Stejný kontrolní úsek pro všechny</label>
+                        <label style="margin: 0;">Stejný referenční úsek pro všechny</label>
                     </div>
-                    <!-- Globální inputy pro kontrolní úsek (skryté ve výchozím stavu) -->
+                    <!-- Globální inputy pro referenční úsek (skryté ve výchozím stavu) -->
                     <div id="globalControlInputs" style="display: none; gap: 15px; margin-top: 15px;">
                         <div style="flex: 1;">
-                            <label>Délka kontrolního úseku (m)</label>
+                            <label>Délka referenčního úseku (m)</label>
                             <input type="number" id="globalControlDist" placeholder="např. 5000">
                         </div>
                         <div style="flex: 1;">
@@ -129,7 +154,7 @@
 
         <!-- Inline script: Jinja proměnná pro celkový počet úseků -->
         <script>
-            window._totalSegments = {{ segment_count|default(0) }};
+            window._totalSegments = {{ segment_count |default (0) }};
         </script>
 
         <!-- ============================================
@@ -439,7 +464,8 @@
                 <div id="logisticsCachedView" style="display: none;">
                     <div id="logisticsCachedResultContainer"></div>
                     <div style="margin-top: 20px; text-align: center;">
-                        <button class="btn btn-outline" style="width: auto; padding: 0.5rem 1.5rem;" onclick="showLogisticsConfigForm()">🔄 Přepočítat logistiku</button>
+                        <button class="btn btn-outline" style="width: auto; padding: 0.5rem 1.5rem;"
+                            onclick="showLogisticsConfigForm()">🔄 Přepočítat logistiku</button>
                     </div>
                 </div>
 
@@ -453,28 +479,36 @@
 
                     <!-- Checkbox pro centrálu -->
                     <div class="form-group" style="margin-bottom: 20px;">
-                        <label style="display: flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
-                            <input type="checkbox" id="logisticsHasCentral" style="width: auto;" onchange="toggleCentralSegmentsUI()">
+                        <label
+                            style="display: flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
+                            <input type="checkbox" id="logisticsHasCentral" style="width: auto;"
+                                onchange="toggleCentralSegmentsUI()">
                             <strong>Máme centrálu</strong>
                         </label>
                         <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 5px; margin-left: 24px;">
-                            Algoritmus se pokusí chytře nasekat závod na různě velké výjezdy, abyste strávili na centrále co
+                            Algoritmus se pokusí chytře nasekat závod na různě velké výjezdy, abyste strávili na
+                            centrále co
                             nejvíce klidného času bez přejíždění.
                         </p>
                     </div>
 
                     <!-- Konfigurace centrálových úseků -->
-                    <div id="centralSegmentsConfig" style="display: none; margin-bottom: 20px; border-top: 1px solid var(--border-color); padding-top: 15px;">
-                        <label style="font-weight: 600; margin-bottom: 10px; display: block;">📍 Úseky začínající/končící v centrále</label>
+                    <div id="centralSegmentsConfig"
+                        style="display: none; margin-bottom: 20px; border-top: 1px solid var(--border-color); padding-top: 15px;">
+                        <label style="font-weight: 600; margin-bottom: 10px; display: block;">📍 Úseky
+                            začínající/končící v centrále</label>
                         <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 15px;">
-                            Označte úseky, které začínají nebo končí přímo v centrále. U těchto úseků se nemusí přejíždět – běžec vybíhá z centrály / dobíhá do centrály.
+                            Označte úseky, které začínají nebo končí přímo v centrále. U těchto úseků se nemusí
+                            přejíždět – běžec vybíhá z centrály / dobíhá do centrály.
                         </p>
-                        <div id="centralSegmentsGrid" style="max-height: 300px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; background: var(--bg-card, #fff);">
+                        <div id="centralSegmentsGrid"
+                            style="max-height: 300px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; background: var(--bg-card, #fff);">
                             <!-- JS vygeneruje seznam úseků -->
                         </div>
                     </div>
 
-                    <button class="btn btn-primary" style="width: 100%;" onclick="calculateLogistics()">Vypočítat a zobrazit
+                    <button class="btn btn-primary" style="width: 100%;" onclick="calculateLogistics()">Vypočítat a
+                        zobrazit
                         logistiku</button>
 
                     <div id="logisticsResultContainer" style="margin-top: 30px;">

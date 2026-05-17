@@ -470,6 +470,43 @@ def sample_json(n):
     )
 
 
+@app.route('/sample/prefilled/<int:n>')
+def sample_prefilled_json(n):
+    """
+    Načte a stáhne reálnou předvyplněnou šablonu z adresáře route/ na základě počtu úseků:
+      15 -> JizeRun
+      24 -> 250 km Českým rájem (250ČR)
+      36 -> Vltava Run
+
+    Args:
+        n (int): Požadovaný počet úseků (15, 24, 36)
+
+    Returns:
+        Response: Předvyplněný JSON soubor ke stažení
+    """
+    filename_map = {
+        15: ('plan_jizerun_2026.json', 'plan_jizerun_2026.json'),
+        24: ('plan_250cr_2026.json', 'plan_250cr_2026.json'),
+        36: ('plan_vlatavarun_2026.json', 'plan_vltava_run_2026.json')
+    }
+
+    if n in filename_map:
+        real_file, download_name = filename_map[n]
+        try:
+            with open(f'route/{real_file}', 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            return Response(
+                json.dumps(data, indent=4, ensure_ascii=False),
+                mimetype="application/json",
+                headers={"Content-disposition": f"attachment; filename={download_name}"}
+            )
+        except Exception as e:
+            return f"Chyba při načítání šablony: {str(e)}", 500
+
+    return "Předvyplněná šablona pro tento počet úseků neexistuje.", 404
+
+
+
 # ============================================
 # API – ILP GENERÁTOR A LOGISTIKA
 # ============================================
