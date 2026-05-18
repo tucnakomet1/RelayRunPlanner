@@ -6,7 +6,19 @@
  *   • t: "sync"  – jen průběh (hotovo + reálný čas), stejné ID závodu u příjemce
  */
 
-const SHARE_FORMAT_VERSION = 2;
+const SHARE_FORMAT_VERSION = 3;
+
+/** Pomocný lokální parser HH:MM:SS na minuty */
+function parseHMSInShare(s) {
+    if (typeof parseHMS === 'function') {
+        return parseHMS(s);
+    }
+    if (!s) return 0;
+    let p = s.split(':').map(v => parseFloat(v) || 0);
+    if (p.length === 3) return p[0] * 60 + p[1] + p[2] / 60;
+    if (p.length === 2) return p[0] * 60 + p[1];
+    return 0;
+}
 
 /** Uloží aktuální závod z paměti do localStorage a vrátí jeho kopii */
 function getCurrentRaceFromStorage() {
@@ -23,7 +35,133 @@ function getCurrentRaceFromStorage() {
     return JSON.parse(JSON.stringify(race));
 }
 
-/** Kompletní závod ke sdílení novému zařízení */
+/** Kompletní závod ke sdílení novému zařízení (Ultra-kompaktní v3) */
+function serializeRaceToV3(race) {
+    const compactSegments = (race.segments || []).map(s => {
+        const id = parseInt(s.id) || 0;
+        const nameDiff = (s.name === `Úsek ${id}`) ? '' : (s.name || '');
+        return [
+            id,
+            nameDiff,
+            parseFloat(s.dist) || 0,
+            parseFloat(s.elev_up) || 0,
+            parseFloat(s.elev_down) || 0,
+            parseInt(s.difficulty) || 3,
+            s.is_done ? 1 : 0,
+            s.actual_time || ''
+        ];
+    });
+
+    const compactRunners = (race.runners || []).map(r => {
+        return [
+            r.name || '',
+            r.color || '#808080',
+            parseFloat(r.ctrl_dist_m) || 5000,
+            parseFloat(r.ctrl_elev) || 100,
+            r.ctrl_time_hms || '',
+            r.segments || []
+        ];
+    });
+
+    let compactLogistics = null;
+    if (race.logistics && race.logistics.config) {
+        const cfg = race.logistics.config;
+        compactLogistics = [
+            parseInt(cfg.car_count) || 1,
+            cfg.has_central ? 1 : 0,
+            cfg.central_segments ? (cfg.central_segments.start || []) : [],
+            cfg.central_segments ? (cfg.central_segments.end || []) : []
+        ];
+    }
+
+    return {
+        v: 3,
+        t: 'full',
+        id: race.id,
+        n: race.name,
+        s: race.start_time,
+        c: parseInt(race.segment_count) || compactSegments.length,
+        g: race.last_generation_method || '',
+        segs: compactSegments,
+        runs: compactRunners,
+        log: compactLogistics
+    };
+}
+
+/** Dekóduje ultra-kompaktní v3 formát zpět na objekt závodu */
+function deserializeV3ToRace(payload) {
+    if (!payload || payload.v !== 3 || payload.t !== 'full') {
+        throw new Error('Neplatný formát v3.');
+    }
+
+    const segments = (payload.segs || []).map(([id, nameDiff, dist, elev_up, elev_down, difficulty, is_done, actual_time]) => {
+        const segId = parseInt(id) || 0;
+        return {
+            id: segId,
+            name: nameDiff || `Úsek ${segId}`,
+            dist: parseFloat(dist) || 0,
+            elev_up: parseFloat(elev_up) || 0,
+            elev_down: parseFloat(elev_down) || 0,
+            difficulty: parseInt(difficulty) || 3,
+            is_done: !!is_done,
+            actual_time: actual_time || ''
+        };
+    });
+
+    const runners = (payload.runs || []).map(([name, color, ctrl_dist_m, ctrl_elev, ctrl_time_hms, segList]) => {
+        const hms = ctrl_time_hms || '';
+        return {
+            name: name || '',
+            color: color || '#808080',
+            ctrl_dist_m: parseFloat(ctrl_dist_m) || 5000,
+            ctrl_elev: parseFloat(ctrl_elev) || 100,
+            ctrl_time_hms: hms,
+            ctrl_time_min: parseHMSInShare(hms),
+            target_count: Array.isArray(segList) ? segList.length : 0,
+            segments: Array.isArray(segList) ? segList.map(x => parseInt(x) || 0) : []
+        };
+    });
+
+    let logistics = null;
+    if (payload.log) {
+        const [car_count, has_central, central_start, central_end] = payload.log;
+        const config = {
+            car_count: parseInt(car_count) || 1,
+            has_central: !!has_central,
+            central_segments: {
+                start: Array.isArray(central_start) ? central_start.map(x => parseInt(x) || 0) : [],
+                end: Array.isArray(central_end) ? central_end.map(x => parseInt(x) || 0) : []
+            }
+        };
+
+        let blocks = [];
+        if (typeof calculateLogisticsInJS === 'function') {
+            try {
+                blocks = calculateLogisticsInJS(runners, segments, config.car_count, config.has_central, config.central_segments);
+            } catch (err) {
+                console.warn('Nepodařilo se přepočítat logistiku při importu:', err);
+            }
+        }
+
+        logistics = {
+            config: config,
+            blocks: blocks
+        };
+    }
+
+    return {
+        id: payload.id,
+        name: payload.n || 'Importovaný závod',
+        start_time: payload.s,
+        segment_count: parseInt(payload.c) || segments.length,
+        segments: segments,
+        runners: runners,
+        logistics: logistics,
+        last_generation_method: payload.g || null
+    };
+}
+
+/** Kompletní závod ke sdílení (Pro legacy podporu) */
 function buildFullRaceSnapshot(race) {
     return {
         id: race.id,
@@ -40,7 +178,7 @@ function buildFullRaceSnapshot(race) {
 /** Kompaktní průběh – předpokládá stejný závod u příjemce */
 function buildSyncSnapshot(race) {
     return {
-        v: SHARE_FORMAT_VERSION,
+        v: 2, // Synchronizační zprávy zůstávají v2
         t: 'sync',
         id: race.id,
         n: race.name,
@@ -60,7 +198,7 @@ function encodeSharePayload(payload) {
     return LZString.compressToEncodedURIComponent(JSON.stringify(payload));
 }
 
-/** Dekóduje a rozpozná typ sdílení */
+/** Dekóduje a rozpozná typ sdílení s podporou zpětné kompatibility */
 function decodeSharePayload(encoded) {
     if (typeof LZString === 'undefined') {
         throw new Error('Chybí knihovna LZ-String.');
@@ -76,22 +214,38 @@ function decodeSharePayload(encoded) {
         return { type: 'full', race: payload.race };
     }
 
-    if (!payload || payload.v !== SHARE_FORMAT_VERSION) {
-        throw new Error('Nepodporovaný formát sdílených dat.');
+    if (!payload) {
+        throw new Error('Neplatná data sdílení.');
     }
 
-    if (payload.t === 'sync') {
+    // Formát v3 (ultra-komprimovaný celý závod)
+    if (payload.v === 3 && payload.t === 'full') {
+        const race = deserializeV3ToRace(payload);
+        return { type: 'full', race: race };
+    }
+
+    // Formát v2
+    if (payload.v === 2) {
+        if (payload.t === 'sync') {
+            if (!payload.id || !Array.isArray(payload.p)) {
+                throw new Error('Neplatná synchronizační zpráva.');
+            }
+            return { type: 'sync', sync: payload };
+        }
+        if (payload.t === 'full' && payload.race && payload.race.id) {
+            return { type: 'full', race: payload.race };
+        }
+    }
+
+    // Pro sync zprávy verze 3 (do budoucna)
+    if (payload.v === 3 && payload.t === 'sync') {
         if (!payload.id || !Array.isArray(payload.p)) {
             throw new Error('Neplatná synchronizační zpráva.');
         }
         return { type: 'sync', sync: payload };
     }
 
-    if (payload.t === 'full' && payload.race && payload.race.id) {
-        return { type: 'full', race: payload.race };
-    }
-
-    throw new Error('Nepodporovaný typ sdílení.');
+    throw new Error('Nepodporovaný formát nebo typ sdílení.');
 }
 
 function getDocumentBaseUrl() {
@@ -276,10 +430,10 @@ function renderShareForMode(mode) {
         const doneCount = payload.p.filter(row => row[1]).length;
         metaText = `Synchronizace · ${race.name} · ${doneCount}/${payload.p.length} doběhnuto`;
     } else {
-        const snap = buildFullRaceSnapshot(race);
-        payload = { v: SHARE_FORMAT_VERSION, t: 'full', race: snap };
-        const doneCount = (snap.segments || []).filter(s => s.is_done).length;
-        metaText = `Celý závod · ${race.name} · ${doneCount}/${snap.segments.length} doběhnuto`;
+        // Použije ultra-kompaktní v3 formát pro sdílení celého závodu
+        payload = serializeRaceToV3(race);
+        const doneCount = (race.segments || []).filter(s => s.is_done).length;
+        metaText = `Celý závod · ${race.name} · ${doneCount}/${(race.segments || []).length} doběhnuto`;
     }
 
     let encoded;
@@ -298,6 +452,22 @@ function renderShareForMode(mode) {
     if (meta) {
         meta.textContent = `${metaText} · délka odkazu ${shareUrl.length} znaků`;
     }
+
+    // Vypsání statistik zkrácení do konzole
+    const origJson = JSON.stringify(race);
+    const compactJson = JSON.stringify(payload);
+    const origLen = origJson.length;
+    const compactLen = compactJson.length;
+    const urlLen = shareUrl.length;
+    const savedPct = Math.round((1 - urlLen / origLen) * 100);
+
+    console.group('📊 Optimalizace sdílení QR kódu (v3)');
+    console.log(`Původní JSON data závodu:  ${origLen} znaků`);
+    console.log(`Zkomprimované v3 poziční: ${compactLen} znaků (redukce o ${Math.round((1 - compactLen / origLen) * 100)}%)`);
+    console.log(`LZ-String zakódovaný hash: ${encoded.length} znaků`);
+    console.log(`Celková délka URL odkazu: ${urlLen} znaků`);
+    console.log(`Celkové zkrácení QR dat:  o ${savedPct}% méně dat!`);
+    console.groupEnd();
 
     updateShareModeTabs();
     renderShareQrCode(shareUrl);
