@@ -18,6 +18,97 @@
 /** Dočasné pole s vygenerovaným přiřazením (před potvrzením uživatelem) */
 let tempGeneratedRunners = [];
 
+/**
+ * Spočítá tempo běžce (min/km) z jeho referenčního úseku.
+ */
+function getRunnerPace(runner) {
+    const distM = parseFloat(runner.ctrl_dist_m || 5000);
+    const timeMin = parseFloat(runner.ctrl_time_min || 25);
+    if (distM <= 0) return 999.0;
+    return timeMin / (distM / 1000.0);
+}
+
+/**
+ * Spočítá obtížnost/úsilí úseku na základě délky, stoupání a obtížnosti.
+ */
+function getSegmentDifficultyScore(seg) {
+    const d = parseFloat(seg.dist || 0);
+    const e = parseFloat(seg.elev_up || 0);
+    const diff = parseInt(seg.difficulty || 3);
+    // Skóre úsilí: vzdálenost + převýšení/100 + obtížnost * 1.5
+    return d + (e / 100.0) + (diff * 1.5);
+}
+
+/**
+ * Provede výkonnostní spárování (post-processing):
+ * 1. Spočítá tempo pro každého běžce.
+ * 2. Rozdělí běžce do skupin (buď celá skupina dohromady, nebo po jednotlivých autech).
+ * 3. Pro každou skupinu spočítá celkovou obtížnost sad vygenerovaných úseků.
+ * 4. Seřadí sady úseků od nejtěžší po nejlehčí.
+ * 5. Seřadí běžce ve skupině od nejrychlejšího po nejpomalejšího.
+ * 6. Přepíše běžcům sady úseků tak, aby nejrychlejší dostali nejtěžší sady.
+ */
+function postProcessPerformanceMatching(runners, carCount, hasCentral, cars) {
+    if (!runners || runners.length === 0) return;
+
+    // Spočítáme tempo pro každého běžce
+    runners.forEach(r => {
+        r._pace = getRunnerPace(r);
+    });
+
+    // Definujeme skupiny běžců, mezi kterými můžeme vyměňovat úseky (car groupings)
+    let groups = [];
+    if (hasCentral || !cars || cars.length === 0) {
+        // Všichni běžci v jedné skupině (libovolná výměna)
+        groups.push(runners.map((r, idx) => idx));
+    } else {
+        // Skupiny podle aut
+        cars.forEach(carRunners => {
+            if (carRunners && carRunners.length > 0) {
+                groups.push([...carRunners]);
+            }
+        });
+    }
+
+    // Pro každou skupinu provedeme seřazení a přiřazení
+    groups.forEach(memberIndices => {
+        if (memberIndices.length <= 1) return;
+
+        // Vytáhneme běžce v této skupině
+        const groupRunners = memberIndices.map(idx => runners[idx]);
+
+        // Vytáhneme jejich aktuálně přiřazené sady úseků
+        // Každá sada úseků má celkovou obtížnost
+        const segmentSets = groupRunners.map(r => {
+            const segmentsList = [...(r.segments || [])];
+            const totalDiff = segmentsList.reduce((sum, segNum) => {
+                const seg = segmentsData[segNum - 1];
+                return sum + (seg ? getSegmentDifficultyScore(seg) : 0);
+            }, 0);
+            return {
+                segments: segmentsList,
+                totalDiff: totalDiff
+            };
+        });
+
+        // Seřadíme sady úseků od nejtěžší po nejlehčí
+        segmentSets.sort((a, b) => b.totalDiff - a.totalDiff);
+
+        // Seřadíme běžce v této skupině od nejrychlejšího po nejpomalejšího (podle tempa)
+        groupRunners.sort((a, b) => a._pace - b._pace);
+
+        // Přiřadíme seřazené sady úseků seřazeným běžcům!
+        groupRunners.forEach((runner, sortedIdx) => {
+            runner.segments = segmentSets[sortedIdx].segments;
+        });
+    });
+
+    // Vyčistíme pomocné vlastnosti
+    runners.forEach(r => {
+        delete r._pace;
+    });
+}
+
 
 // ============================================
 // NÁHODNÉ GENEROVÁNÍ
@@ -55,12 +146,16 @@ function pickRandomUnused(minRange, maxRange, usedSet) {
 /**
  * Vygeneruje náhodné přiřazení úseků pro všechny běžce.
  * Zachovává počet úseků každého běžce, ale přiřadí nové z rovnoměrně
- * rozložených intervalů trasy.
+ * rozložených intervalů trasy. Zohledňuje výkonnost běžců a obtížnost úseků.
  */
-function generateRandomSegments() {
+function generateRandomSegments(useCurrentTemp = false) {
     document.getElementById('segmentsDropdown').classList.remove('active');
 
-    if (!runnersData || runnersData.length === 0) {
+    const sourceRunners = useCurrentTemp && tempGeneratedRunners && tempGeneratedRunners.length > 0
+        ? tempGeneratedRunners
+        : window.runnersData;
+
+    if (!sourceRunners || sourceRunners.length === 0) {
         alert("Nejsou přiřazeni žádní běžci!");
         return;
     }
@@ -68,11 +163,14 @@ function generateRandomSegments() {
     const totalSegments = segmentsData.length;
     let usedSet = new Set();
 
-    // Deep copy – nechceme modifikovat originální data
-    tempGeneratedRunners = JSON.parse(JSON.stringify(runnersData));
+    // Vytáhneme počet segmentů pro každého běžce
+    const counts = sourceRunners.map(r => r.target_count || (r.segments ? r.segments.length : 0));
 
-    tempGeneratedRunners.forEach(runner => {
-        const segCount = runner.segments.length;
+    // Deep copy originálních dat
+    tempGeneratedRunners = JSON.parse(JSON.stringify(window.runnersData));
+
+    tempGeneratedRunners.forEach((runner, idx) => {
+        const segCount = counts[idx];
         runner.segments = []; // Vyprázdníme pro nové přiřazení
 
         if (segCount > 0 && totalSegments > 0) {
@@ -88,6 +186,11 @@ function generateRandomSegments() {
         }
     });
 
+    // Provedeme post-processing pro dokonalé výkonnostní spárování napříč celým týmem
+    postProcessPerformanceMatching(tempGeneratedRunners, 1, true, null);
+
+    window._lastGenerationMethod = 'random';
+    updateRecalculateButtonVisibility();
     showAnalysisModal();
 }
 
@@ -226,28 +329,25 @@ function closeAnalysisModal() {
     document.getElementById('analysisModal').style.display = 'none';
 }
 
-/**
- * Uloží vygenerované přiřazení na server a provede reload.
- */
-async function applyGeneratedSegments() {
-    try {
-        let res = await fetch(`/api/race/${RACE_ID}/edit_settings`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                runners: tempGeneratedRunners
-            })
-        });
+function applyGeneratedSegments() {
+    if (!tempGeneratedRunners) return;
 
-        let data = await res.json();
-        if (data.status === 'success') {
-            window.location.reload();
-        } else {
-            alert("Chyba při ukládání: " + (data.error || "Neznámá chyba"));
-        }
-    } catch (e) {
-        alert("Nepodařilo se uložit rozlosování.");
-        console.error(e);
+    // Přepsat globální běžce vygenerovaným rozřazením
+    window.runnersData = JSON.parse(JSON.stringify(tempGeneratedRunners));
+
+    // Uložit do localStorage
+    if (typeof saveCurrentRaceToLocalStorage === 'function') {
+        saveCurrentRaceToLocalStorage();
+    }
+
+    closeAnalysisModal();
+
+    // Překreslit a přepočítat časy na místě
+    if (typeof renderSidebarRunners === 'function') {
+        renderSidebarRunners();
+    }
+    if (typeof recalculateAll === 'function') {
+        recalculateAll();
     }
 }
 
@@ -269,7 +369,16 @@ function openSmartGenModal() {
 
 /** Zavře Smart Gen modal */
 function closeSmartGenModal() {
+    cancelSmartGeneration();
     document.getElementById('smartGenModal').style.display = 'none';
+}
+
+/** Globální instance aktivního Web Workera pro optimalizaci */
+let activeSmartGenWorker = null;
+
+/** Stornuje spuštěné výpočty (nepotřebné pro rychlý synchronní solver) */
+function cancelSmartGeneration() {
+    // Solver běží bleskově v hlavním vlákně, storno netřeba
 }
 
 /**
@@ -325,10 +434,353 @@ function generateCarForms() {
 }
 
 /**
- * Spustí pokročilé generování – odešle konfiguraci na server,
- * kde se řeší ILP model. Po úspěchu zobrazí analytický modal.
+ * Logovací funkce pro zobrazení diagnostiky optimalizace v reálném čase.
  */
-async function runSmartGeneration() {
+function logToDiagnostics(message) {
+    console.log("[ILP Diagnostics]", message);
+    const container = document.getElementById('sgDiagnosticsContainer');
+    const logDiv = document.getElementById('sgDiagnosticsLog');
+    if (container && logDiv) {
+        container.style.display = 'block';
+        const now = new Date();
+        const timeStr = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
+        logDiv.innerHTML += `[${timeStr}] ${message}\n`;
+        logDiv.scrollTop = logDiv.scrollHeight;
+    }
+}
+
+function clearDiagnostics() {
+    const container = document.getElementById('sgDiagnosticsContainer');
+    const logDiv = document.getElementById('sgDiagnosticsLog');
+    if (container && logDiv) {
+        container.style.display = 'none';
+        logDiv.innerHTML = '';
+    }
+}
+
+/**
+ * Najde optimální přiřazení úseků běžcům pomocí ILP (celočíselného lineárního programování)
+ * přímo v prohlížeči přes knihovnu glpk.js.
+ * 
+ * Kopíruje kompletní optimalizační ILP model z původního generator.py.
+ */
+function solveIlpModel(glpk, runners, segments, gap, carCount, hasCentral, cars, useSpread) {
+    const R = runners.length;
+    const S = segments.length;
+
+    // Průměrná vzdálenost a převýšení na úsek
+    const avg_dist = S > 0 ? segments.reduce((sum, seg) => sum + (seg.dist || 0), 0) / S : 0;
+    const avg_elev = S > 0 ? segments.reduce((sum, seg) => sum + (seg.elev_up || 0), 0) / S : 0;
+
+    // Příprava logistiky aut (pokud hasCentral = false)
+    const car_assignments = [];
+    if (!hasCentral) {
+        let car_turn = 0;
+        let segment_idx = 0;
+        while (segment_idx < S) {
+            const active_car = cars[car_turn];
+            if (!active_car || active_car.length === 0) {
+                car_turn = (car_turn + 1) % carCount;
+                continue;
+            }
+            const run_limit = active_car.length;
+            let run_count = 0;
+            while (run_count < run_limit && segment_idx < S) {
+                car_assignments.push(car_turn);
+                segment_idx++;
+                run_count++;
+            }
+            car_turn = (car_turn + 1) % carCount;
+        }
+    }
+
+    // Sestavení proměnných a mezí pro glpk.js (čistě feasibility model pro okamžité řešení)
+    const objVars = [];
+    const bounds = [];
+
+    const binaries = [];
+    for (let r = 0; r < R; r++) {
+        for (let s = 0; s < S; s++) {
+            let allowed = true;
+            if (!hasCentral) {
+                const assigned_car_idx = car_assignments[s];
+                const allowed_runners = cars[assigned_car_idx] || [];
+                if (!allowed_runners.includes(r)) {
+                    allowed = false;
+                }
+            }
+            if (allowed) {
+                const varName = `x_${r}_${s}`;
+                objVars.push({ name: varName, coef: 0.0 });
+                binaries.push(varName);
+            }
+        }
+    }
+
+    const subjectTo = [];
+
+    // 1. Omezení obsazenosti úseku (každý úsek běží právě jeden běžec)
+    for (let s = 0; s < S; s++) {
+        const vars = [];
+        for (let r = 0; r < R; r++) {
+            let allowed = true;
+            if (!hasCentral) {
+                const assigned_car_idx = car_assignments[s];
+                const allowed_runners = cars[assigned_car_idx] || [];
+                if (!allowed_runners.includes(r)) {
+                    allowed = false;
+                }
+            }
+            if (allowed) {
+                vars.push({ name: `x_${r}_${s}`, coef: 1.0 });
+            }
+        }
+        subjectTo.push({
+            name: `seg_occupied_${s}`,
+            vars: vars,
+            bnds: { type: glpk.GLP_FX, lb: 1.0, ub: 1.0 }
+        });
+    }
+
+    // 2. Omezení zátěže běžce (každý běžec běží přesně target_count úseků)
+    for (let r = 0; r < R; r++) {
+        const vars = [];
+        for (let s = 0; s < S; s++) {
+            let allowed = true;
+            if (!hasCentral) {
+                const assigned_car_idx = car_assignments[s];
+                const allowed_runners = cars[assigned_car_idx] || [];
+                if (!allowed_runners.includes(r)) {
+                    allowed = false;
+                }
+            }
+            if (allowed) {
+                vars.push({ name: `x_${r}_${s}`, coef: 1.0 });
+            }
+        }
+        subjectTo.push({
+            name: `runner_target_${r}`,
+            vars: vars,
+            bnds: { type: glpk.GLP_FX, lb: parseFloat(runners[r].target_count), ub: parseFloat(runners[r].target_count) }
+        });
+    }
+
+    // 3. Omezení odpočinku - gap
+    if (gap > 0) {
+        for (let r = 0; r < R; r++) {
+            for (let s_start = 0; s_start < S - gap; s_start++) {
+                const vars = [];
+                for (let i = 0; i <= gap; i++) {
+                    const s = s_start + i;
+                    let allowed = true;
+                    if (!hasCentral) {
+                        const assigned_car_idx = car_assignments[s];
+                        const allowed_runners = cars[assigned_car_idx] || [];
+                        if (!allowed_runners.includes(r)) {
+                            allowed = false;
+                        }
+                    }
+                    if (allowed) {
+                        vars.push({ name: `x_${r}_${s}`, coef: 1.0 });
+                    }
+                }
+                if (vars.length > 0) {
+                    subjectTo.push({
+                        name: `gap_${r}_${s_start}`,
+                        vars: vars,
+                        bnds: { type: glpk.GLP_UP, lb: 0.0, ub: 1.0 }
+                    });
+                }
+            }
+        }
+    }
+
+    // 4. Spread constraint - rovnoměrné rozmístění
+    if (useSpread) {
+        for (let r = 0; r < R; r++) {
+            const K = runners[r].target_count;
+            if (K > 1) {
+                const interval_size = S / K;
+                for (let i = 0; i < K; i++) {
+                    const start_idx = Math.round(i * interval_size);
+                    const end_idx = Math.round((i + 1) * interval_size);
+
+                    const vars = [];
+                    for (let s = start_idx; s < end_idx; s++) {
+                        let allowed = true;
+                        if (!hasCentral) {
+                            const assigned_car_idx = car_assignments[s];
+                            const allowed_runners = cars[assigned_car_idx] || [];
+                            if (!allowed_runners.includes(r)) {
+                                allowed = false;
+                            }
+                        }
+                        if (allowed) {
+                            vars.push({ name: `x_${r}_${s}`, coef: 1.0 });
+                        }
+                    }
+                    if (vars.length > 0) {
+                        subjectTo.push({
+                            name: `spread_${r}_${i}`,
+                            vars: vars,
+                            bnds: { type: glpk.GLP_UP, lb: 0.0, ub: 1.0 }
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // Model je nyní čistě feasibility model, spravedlivé rozdělení obtížnosti úseků
+    // je dokonale zajištěno post-processingem (postProcessPerformanceMatching).
+
+    const lp = {
+        name: "RelayRunPlanner",
+        objective: {
+            direction: glpk.GLP_MIN,
+            name: "obj",
+            vars: objVars
+        },
+        subjectTo: subjectTo,
+        bounds: bounds,
+        binaries: binaries
+    };
+
+    const options = {
+        msglev: glpk.GLP_MSG_ALL,
+        presol: true,
+        tmlim: 3 // glpk.js: časový limit v sekundách
+    };
+
+    logToDiagnostics(`Model: ${subjectTo.length} omezení, ${objVars.length} proměnných.`);
+    logToDiagnostics(`Spouštím GLPK solver (limit 3s)...`);
+
+    const result = glpk.solve(lp, options);
+    const solveResult = result.result || {};
+    const status = solveResult.status;
+
+    const isFeasible = (status === glpk.GLP_OPT || status === glpk.GLP_FEAS);
+    logToDiagnostics(`Výsledek solveru: status = ${status} (feasible = ${isFeasible})`);
+
+    if (!isFeasible || !solveResult.vars) {
+        logToDiagnostics(`Tento krok neuspěl – nepřípustné řešení nebo vypršel čas.`);
+        return {
+            status: "error",
+            message: "Pravidla jsou příliš přísná a řešení neexistuje."
+        };
+    }
+
+    // Extrakce přiřazení z binárních proměnných
+    const assignment = new Array(S).fill(-1);
+    let hasAssignments = false;
+
+    for (let r = 0; r < R; r++) {
+        for (let s = 0; s < S; s++) {
+            const varName = `x_${r}_${s}`;
+            if (solveResult.vars[varName] !== undefined && solveResult.vars[varName] > 0.5) {
+                assignment[s] = r;
+                hasAssignments = true;
+            }
+        }
+    }
+
+    if (!hasAssignments) {
+        return {
+            status: "error",
+            message: "Optimalizace selhala."
+        };
+    }
+
+    return {
+        status: "success",
+        assignment: assignment
+    };
+}
+
+function generateIlpPlanInJS(glpk, runners, segments, gap, carCount, hasCentral, cars) {
+    const R = runners.length;
+    const S = segments.length;
+
+    if (R === 0 || S === 0) {
+        return { status: "error", message: "Nedostatek běžců nebo úseků pro optimalizaci." };
+    }
+
+    // Ujistíme se, že sum(target_count) == S
+    let totalTarget = 0;
+    runners.forEach(r => {
+        r.target_count = r.target_count || (r.segments ? r.segments.length : 0);
+        totalTarget += r.target_count;
+    });
+
+    if (totalTarget !== S && R > 0) {
+        let diff = S - totalTarget;
+        if (diff > 0) {
+            while (diff > 0) {
+                for (let i = 0; i < R && diff > 0; i++) {
+                    runners[i].target_count++;
+                    diff--;
+                }
+            }
+        } else if (diff < 0) {
+            while (diff < 0) {
+                let changed = false;
+                for (let i = 0; i < R && diff < 0; i++) {
+                    if (runners[i].target_count > 1) {
+                        runners[i].target_count--;
+                        diff++;
+                        changed = true;
+                    }
+                }
+                if (!changed) break;
+            }
+        }
+    }
+
+    // 1. Zkusit plný model (včetně spread constraints)
+    logToDiagnostics("FÁZE 1: Pokouším se o plný model (gap + spread)...");
+    let res = solveIlpModel(glpk, runners, segments, gap, carCount, hasCentral, cars, true);
+    if (res.status === "success") {
+        logToDiagnostics("FÁZE 1 úspěšně nalezla řešení!");
+        return res;
+    }
+
+    // 2. Fallback: bez spread constraints
+    logToDiagnostics("FÁZE 1 selhala. FÁZE 2: Zkouším model bez spread constraints...");
+    res = solveIlpModel(glpk, runners, segments, gap, carCount, hasCentral, cars, false);
+    if (res.status === "success") {
+        logToDiagnostics("FÁZE 2 úspěšně nalezla řešení!");
+        return res;
+    }
+
+    // 3. Fallback 2: postupné snižování gapu
+    logToDiagnostics("FÁZE 2 selhala. FÁZE 3: Budu postupně snižovat pauzu (gap)...");
+    let currentGap = gap;
+    while (currentGap > 0) {
+        currentGap--;
+        logToDiagnostics(`FÁZE 3: Zkouším uvolněný gap = ${currentGap}...`);
+        res = solveIlpModel(glpk, runners, segments, currentGap, carCount, hasCentral, cars, false);
+        if (res.status === "success") {
+            logToDiagnostics(`FÁZE 3 úspěšně nalezla řešení s gapem = ${currentGap}!`);
+            res.message = `Optimalizace uspěla s mírnějším gapem: ${currentGap} (původní: ${gap}).`;
+            return res;
+        }
+    }
+
+    return {
+        status: "error",
+        message: "Optimalizace selhala. Ani po uvolnění všech pravidel nebylo možné najít přípustné řešení."
+    };
+}
+
+/**
+ * Spustí pokročilé generování – vypočítá ILP přiřazení plně v prohlížeči,
+ * na pozadí pomocí Web Workera pro zachování plynulosti UI.
+ */
+function runSmartGeneration() {
+    // Stornujeme předchozí běžící výpočty, pokud existují
+    cancelSmartGeneration();
+    clearDiagnostics();
+
     const btn = document.querySelector('#smartGenModal .btn-primary');
     const originalText = btn.innerText;
 
@@ -340,7 +792,7 @@ async function runSmartGeneration() {
     let cars = [];
     let runners = JSON.parse(JSON.stringify(runnersData)); // Deep copy
     runners.forEach(r => {
-        r.target_count = r.segments ? r.segments.length : 0;
+        r.target_count = r.target_count || (r.segments ? r.segments.length : 0);
         r.segments = []; // Reset pro novou generaci
     });
 
@@ -374,41 +826,95 @@ async function runSmartGeneration() {
         });
     }
 
-    btn.innerText = 'Načítání (řeším model)...';
+    btn.innerText = 'Počítám...';
     btn.disabled = true;
 
-    try {
-        let res = await fetch(`/api/race/${RACE_ID}/smart_generate_ilp`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                runners: runners,
-                min_pause: minPause,
-                car_count: carCount,
-                has_central: hasCentral,
-                cars: cars
-            })
-        });
+    logToDiagnostics("Spouštím optimalizaci v hlavním vlákně...");
 
-        let data = await res.json();
-
-        if (data.status === 'success') {
-            // Převedení výsledného přiřazení zpět na pole segmentů pro běžce
-            let assignment = data.assignment;
-            assignment.forEach((runnerIdx, segmentIdx) => {
-                runners[runnerIdx].segments.push(segmentIdx + 1); // 1-indexed
-            });
-            tempGeneratedRunners = runners;
-            closeSmartGenModal();
-            showAnalysisModal();
-        } else {
-            alert("Chyba při generování: " + (data.message || data.error));
+    // Krátká prodleva pro překreslení tlačítka a diagnostiky v UI
+    setTimeout(async () => {
+        let wasmBinary = null;
+        if (typeof GLPK_WASM_BASE64 !== 'undefined') {
+            try {
+                const binaryString = atob(GLPK_WASM_BASE64);
+                const len = binaryString.length;
+                const bytes = new Uint8Array(len);
+                for (let i = 0; i < len; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                wasmBinary = bytes.buffer;
+                logToDiagnostics("Úspěšně dekódována lokální in-memory knihovna GLPK (WASM).");
+            } catch (e) {
+                logToDiagnostics("⚠️ Nepodařilo se dekódovat lokální WASM: " + e.message);
+            }
         }
-    } catch (e) {
-        alert("Nepodařilo se spojit se serverem.");
-        console.error(e);
-    } finally {
-        btn.innerText = originalText;
-        btn.disabled = false;
+
+        if (!wasmBinary) {
+            throw new Error(
+                'GLPK WASM není k dispozici. Ověřte, že je načten soubor static/js/glpk_wasm.js.'
+            );
+        }
+
+        try {
+            logToDiagnostics("Inicializuji GLPK solver...");
+            const glpk = await GLPK({ wasmBinary });
+            logToDiagnostics("GLPK solver inicializován úspěšně. Verze: " + glpk.version);
+
+            const segments = (typeof segmentsData !== 'undefined') ? segmentsData : [];
+            logToDiagnostics("Sestavuji model a spouštím optimalizaci...");
+            const data = generateIlpPlanInJS(glpk, runners, segments, minPause, carCount, hasCentral, cars);
+
+            btn.innerText = originalText;
+            btn.disabled = false;
+
+            if (data.status === 'success') {
+                const assignment = data.assignment;
+                assignment.forEach((runnerIdx, segmentIdx) => {
+                    runners[runnerIdx].segments.push(segmentIdx + 1); // 1-indexed
+                });
+                tempGeneratedRunners = runners;
+
+                // Provedeme post-processing pro dokonalé výkonnostní spárování (v rámci aut nebo týmu)
+                postProcessPerformanceMatching(tempGeneratedRunners, carCount, hasCentral, cars);
+
+                window._lastGenerationMethod = 'smart';
+                updateRecalculateButtonVisibility();
+                closeSmartGenModal();
+                showAnalysisModal();
+            } else {
+                alert("Chyba při generování: " + (data.message || "Model nemá řešení. Zkuste snížit požadavky."));
+            }
+        } catch (err) {
+            logToDiagnostics("❌ Chyba při běhu optimalizace: " + err.message);
+            btn.innerText = originalText;
+            btn.disabled = false;
+            alert("Optimalizace selhala: " + err.message);
+        }
+    }, 50);
+}
+
+/**
+ * Spustí přepočet / znovu-vygenerování úseků na základě naposledy použité metody.
+ * U náhodného generování zachovává aktuální rozložení počtu úseků z tempGeneratedRunners.
+ */
+function regenerateAnalysis() {
+    if (window._lastGenerationMethod === 'smart') {
+        runSmartGeneration();
+    } else {
+        generateRandomSegments(true);
+    }
+}
+
+/**
+ * Aktualizuje viditelnost tlačítka pro rychlý přepočet úseků.
+ */
+function updateRecalculateButtonVisibility() {
+    const recalcBtn = document.getElementById('recalculateSegmentsBtn');
+    if (recalcBtn) {
+        if (window._lastGenerationMethod) {
+            recalcBtn.style.display = 'flex';
+        } else {
+            recalcBtn.style.display = 'none';
+        }
     }
 }

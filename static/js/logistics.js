@@ -23,13 +23,7 @@
  */
 
 
-// ============================================
-// CACHED DATA Z BACKENDU
-// ============================================
-
-/** Uložená logistika ze serveru (načtena při renderování stránky) */
-let cachedLogisticsData = null;
-let cachedLogisticsConfig = null;
+// Globální proměnné pro logistiku jsou deklarovány v index.html a router.js
 
 
 // ============================================
@@ -186,10 +180,189 @@ function collectCentralSegments() {
 // ============================================
 
 /**
- * Odešle konfiguraci logistiky na server, kde se vypočítají
- * optimální bloky aut. Výsledek se uloží do DB a zobrazí.
+ * Vypočítá optimální rozložení úseků do bloků aut plně na klientské straně.
+ * Kopíruje kompletní optimalizační DP / Lineární algoritmus z původního logistics.py.
+ * 
+ * @param {Array} runners          - Seznam běžců s polem 'segments' (1-indexed)
+ * @param {Array} segments         - Seznam úseků závodu
+ * @param {number} carCount        - Počet aut v týmu
+ * @param {boolean} hasCentral     - True = centrálový režim, False = lineární
+ * @param {Object} centralSegments - Konfigurace centrálových úseků: { start: [], end: [] }
+ * @returns {Array} Seznam bloků s posádkami a přiřazenými úseky
  */
-async function calculateLogistics() {
+function calculateLogisticsInJS(runners, segments, carCount, hasCentral, centralSegments) {
+    const N = segments.length;
+    if (N === 0) return [];
+
+    const centralStartSet = new Set(centralSegments ? (centralSegments.start || []) : []);
+    const centralEndSet = new Set(centralSegments ? (centralSegments.end || []) : []);
+
+    // runnerForSeg[s] = index běžce, kde s je 0-indexed index úseku
+    const runnerForSeg = new Array(N).fill(-1);
+    runners.forEach((r, rIdx) => {
+        (r.segments || []).forEach(sId => {
+            if (sId >= 1 && sId <= N) {
+                runnerForSeg[sId - 1] = rIdx;
+            }
+        });
+    });
+
+    const blocks = [];
+
+    if (!hasCentral) {
+        // ============================================
+        // LINEÁRNÍ REŽIM (bez centrály)
+        // ============================================
+        // Úseky se rovnoměrně rozdělí mezi auta.
+        const baseSize = Math.floor(N / carCount);
+        const rem = N % carCount;
+
+        let start = 0;
+        for (let i = 0; i < carCount; i++) {
+            const size = baseSize + (i < rem ? 1 : 0);
+            const end = start + size;
+
+            if (size === 0) continue;
+
+            // Zjistíme, kteří běžci jsou v tomto bloku
+            const carRunners = new Set();
+            for (let s = start; s < end; s++) {
+                if (runnerForSeg[s] !== -1) {
+                    carRunners.add(runnerForSeg[s]);
+                }
+            }
+
+            blocks.push({
+                "car_num": i + 1,
+                "start_seg": start + 1,
+                "end_seg": end,
+                "outbound": Array.from(carRunners),
+                "returning": Array.from(carRunners),
+                "incoming": []
+            });
+            start = end;
+        }
+    } else {
+        // ============================================
+        // CENTRÁLOVÝ REŽIM (s centrální základnou)
+        // ============================================
+        // Dynamické programování hledá optimální rozdělení N úseků
+        // na bloky velikosti 2, 3 nebo 4.
+        const memo = {};
+
+        function solve(idx) {
+            if (idx === N) {
+                return [0, []];
+            }
+            if (idx in memo) {
+                return memo[idx];
+            }
+
+            let bestCost = Infinity;
+            let bestPath = null;
+
+            for (const k of [2, 3, 4]) {
+                if (idx + k <= N) {
+                    const [costRest, pathRest] = solve(idx + k);
+
+                    // Spočítáme unikátní lidi v tomto bloku
+                    const people = new Set();
+                    for (let s = idx; s < idx + k; s++) {
+                        if (runnerForSeg[s] !== -1) {
+                            people.add(runnerForSeg[s]);
+                        }
+                    }
+                    if (idx > 0 && runnerForSeg[idx - 1] !== -1) {
+                        people.add(runnerForSeg[idx - 1]);
+                    }
+
+                    let costHere = people.size * k;
+                    if (k === 3) {
+                        costHere -= 1; // Preference bloků o velikosti 3
+                    }
+
+                    const totalCost = costHere + costRest;
+                    if (totalCost < bestCost) {
+                        bestCost = totalCost;
+                        bestPath = [k].concat(pathRest);
+                    }
+                }
+            }
+
+            memo[idx] = [bestCost, bestPath];
+            return memo[idx];
+        }
+
+        const [_, bestKList] = solve(0);
+
+        // Sestavení bloků z optimálního rozdělení
+        let start = 0;
+        let carTurn = 0;
+        bestKList.forEach((k, blockIdx) => {
+            const end = start + k;
+            const firstSegId = start + 1;
+            const lastSegId = end;
+
+            const firstStartsAtCentral = centralStartSet.has(firstSegId);
+            const lastEndsAtCentral = centralEndSet.has(lastSegId);
+
+            // --- OUTBOUND: kdo jede z centrály v autě ---
+            const outbound = new Set();
+            for (let s = start + 1; s < end; s++) {
+                if (runnerForSeg[s] !== -1) {
+                    outbound.add(runnerForSeg[s]);
+                }
+            }
+
+            // Běžec pro úsek E+1 (vysazen na poslední předávce)
+            if (end < N && runnerForSeg[end] !== -1) {
+                const nextSegId = end + 1;
+                if (!centralStartSet.has(nextSegId)) {
+                    outbound.add(runnerForSeg[end]);
+                }
+            }
+
+            // Výjimka: první úsek 1 nezačíná v centrále -> běžec tam musí jet autem
+            if (blockIdx === 0 && !firstStartsAtCentral) {
+                if (runnerForSeg[start] !== -1) {
+                    outbound.add(runnerForSeg[start]);
+                }
+            }
+
+            // --- RETURNING: kdo se vrací do centrály ---
+            const returning = new Set();
+            for (let s = start; s < end; s++) {
+                if (runnerForSeg[s] !== -1) {
+                    const segId = s + 1;
+                    if (!centralEndSet.has(segId)) {
+                        returning.add(runnerForSeg[s]);
+                    }
+                }
+            }
+
+            blocks.push({
+                "car_num": (carTurn % carCount) + 1,
+                "start_seg": start + 1,
+                "end_seg": end,
+                "outbound": Array.from(outbound),
+                "returning": Array.from(returning),
+                "first_starts_at_central": firstStartsAtCentral,
+                "last_ends_at_central": lastEndsAtCentral
+            });
+
+            start = end;
+            carTurn++;
+        });
+    }
+
+    return blocks;
+}
+
+/**
+ * Vypočítá konfiguraci logistiky kompletně v prohlížeči,
+ * zobrazí výsledek a odešle jej k pasivnímu uložení do databáze.
+ */
+function calculateLogistics() {
     const btn = document.querySelector('#logisticsConfigView .btn-primary');
     const originalText = btn.innerText;
     const carCount = parseInt(document.getElementById('logisticsCarCount').value) || 1;
@@ -202,37 +375,41 @@ async function calculateLogistics() {
     container.innerHTML = '';
 
     try {
-        // Získání RACE_ID – buď z globální proměnné, nebo z URL
-        const raceId = typeof RACE_ID !== 'undefined' ? RACE_ID : window.location.pathname.split('/').pop();
+        const runners = (typeof tempGeneratedRunners !== 'undefined' && tempGeneratedRunners.length > 0) ? tempGeneratedRunners : runnersData;
+        const segments = (typeof segmentsData !== 'undefined') ? segmentsData : [];
 
-        let res = await fetch(`/api/race/${raceId}/logistics`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                runners: (typeof tempGeneratedRunners !== 'undefined' && tempGeneratedRunners.length > 0) ? tempGeneratedRunners : runnersData,
-                car_count: carCount,
-                has_central: hasCentral,
-                central_segments: centralSegments
-            })
-        });
+        // 1. Spočítat kompletní logistiku přímo v prohlížeči
+        const blocks = calculateLogisticsInJS(runners, segments, carCount, hasCentral, centralSegments);
 
-        let data = await res.json();
-        if (data.status === 'success') {
-            const config = {
-                car_count: carCount,
-                has_central: hasCentral,
-                central_segments: centralSegments
-            };
-            renderLogisticsResult(data.blocks, 'logisticsResultContainer', config);
+        const config = {
+            car_count: carCount,
+            has_central: hasCentral,
+            central_segments: centralSegments
+        };
 
-            // Aktualizujeme lokální cache
-            cachedLogisticsData = { blocks: data.blocks, config: config };
-            cachedLogisticsConfig = config;
-        } else {
-            alert("Chyba při výpočtu logistiky: " + (data.message || data.error));
+        const raceId = typeof window.RACE_ID !== 'undefined' ? window.RACE_ID : '';
+
+        // 2. Uložit předpočítanou logistiku do localStorage
+        if (raceId) {
+            const races = getRacesFromLocalStorage();
+            if (races[raceId]) {
+                races[raceId].logistics = {
+                    blocks: blocks,
+                    config: config
+                };
+                saveRacesToLocalStorage(races);
+            }
         }
+
+        // 3. Vykreslit výsledky z lokálně spočítaných bloků
+        renderLogisticsResult(blocks, 'logisticsResultContainer', config);
+
+        // Aktualizujeme lokální cache
+        cachedLogisticsData = { blocks: blocks, config: config };
+        cachedLogisticsConfig = config;
+
     } catch (e) {
-        alert("Nepodařilo se spojit se serverem.");
+        alert("Výpočet logistiky selhal.");
         console.error(e);
     } finally {
         btn.innerText = originalText;

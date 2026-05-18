@@ -4,15 +4,10 @@
  * Tento soubor řídí celý pohled na detail závodu:
  *   - Výpočet a zobrazení časů startu, trvání a předávek
  *   - Adaptivní predikce na základě předchozího výkonu běžce
- *   - Synchronizace stavu s backendem (polling každých 10s)
  *   - Označování úseků jako „doběhnutých"
- *   - Správa modálu nastavení závodu
+ *   - Správa modálu nastavení závodu (název, start)
  *
- * Globální proměnné (definované inline v HTML):
- *   - START_ISO     : ISO 8601 řetězec se startem závodu
- *   - RACE_ID       : Unikátní ID závodu v databázi
- *   - segmentsData  : Pole objektů s daty úseků (z Jinja)
- *   - runnersData   : Pole objektů s daty běžců (z Jinja)
+ * Všechna data se ukládají lokálně přes localStorage.
  */
 
 
@@ -22,13 +17,11 @@
 
 /**
  * Rekonstruuje data běžců ze segmentů, pokud v DB nejsou uložena.
- * Starší závody nemají explicitní pole 'runners' – musíme je
- * zpětně odvodit z přiřazení úseků.
  */
 function ensureRunnersData() {
-    if (!runnersData || runnersData.length === 0) {
+    if (!window.runnersData || window.runnersData.length === 0) {
         const reconstructed = {};
-        segmentsData.forEach(seg => {
+        window.segmentsData.forEach(seg => {
             if (seg.runner && seg.runner !== 'Nepřiřazeno') {
                 if (!reconstructed[seg.runner]) {
                     reconstructed[seg.runner] = {
@@ -39,15 +32,13 @@ function ensureRunnersData() {
                         ctrl_dist_m: 5000,
                         ctrl_elev: 100,
                         segments: [],
-                        _first_seg: seg  // Uložíme první úsek pro zpětný výpočet tempa
+                        _first_seg: seg
                     };
                 }
                 reconstructed[seg.runner].segments.push(seg.id);
             }
         });
 
-        // Zpětný výpočet kontrolního času z prvního úseku běžce
-        // Logika: pace = planned_duration / eq_dist, ctrl_time = pace * ctrl_eq_dist
         Object.values(reconstructed).forEach(r => {
             const seg = r._first_seg;
             if (seg && seg.planned_duration_min && seg.dist > 0) {
@@ -60,13 +51,13 @@ function ensureRunnersData() {
                     const h = Math.floor(ctrlTimeMin / 60);
                     const m = Math.floor(ctrlTimeMin % 60);
                     const s = Math.round((ctrlTimeMin % 1) * 60);
-                    r.ctrl_time_hms = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+                    r.ctrl_time_hms = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
                 }
             }
             delete r._first_seg;
         });
 
-        runnersData = Object.values(reconstructed);
+        window.runnersData = Object.values(reconstructed);
     }
 }
 
@@ -75,14 +66,9 @@ function ensureRunnersData() {
 // FORMÁTOVACÍ FUNKCE
 // ============================================
 
-/** Koeficienty výkonu běžců (aktualizují se při každém přepočtu) */
 let runnerFactors = {};
 
-/**
- * Formátuje minuty na řetězec HH:MM:SS (pro input pole).
- * @param {number} totalMin – Celkový čas v minutách
- * @returns {string} – Formátovaný řetězec, např. "01:23:45"
- */
+/** Formátuje minuty na řetězec HH:MM:SS */
 function formatHMS(totalMin) {
     let h = Math.floor(totalMin / 60);
     let m = Math.floor(totalMin % 60);
@@ -90,31 +76,19 @@ function formatHMS(totalMin) {
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
 
-/**
- * Formátuje minuty na lidsky čitelný řetězec "Xh YYm".
- * @param {number} totalMin – Celkový čas v minutách
- * @returns {string} – Formátovaný řetězec, např. "2h 05m"
- */
+/** Formátuje minuty na lidsky čitelný řetězec "Xh YYm" */
 function formatHM(totalMin) {
     let h = Math.floor(totalMin / 60);
     let m = Math.floor(totalMin % 60);
     return `${h}h ${m.toString().padStart(2, '0')}m`;
 }
 
-/**
- * Formátuje Date objekt na řetězec HH:MM.
- * @param {Date} date – Objekt data
- * @returns {string} – Formátovaný čas, např. "14:30"
- */
+/** Formátuje Date objekt na řetězec HH:MM */
 function formatTime(date) {
     return date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
 }
 
-/**
- * Formátuje odchylku v minutách na řetězec ±HH:MM:SS.
- * @param {number} diffMinutes – Rozdíl v minutách (kladný = pomalejší)
- * @returns {string} – Formátovaný řetězec, např. "+00:05:30"
- */
+/** Formátuje odchylku v minutách na řetězec ±HH:MM:SS */
 function formatDiff(diffMinutes) {
     let diffSec = diffMinutes * 60;
     let sign = diffSec >= 0 ? '+' : '-';
@@ -125,12 +99,9 @@ function formatDiff(diffMinutes) {
     return `${sign}${h}:${m}:${s}`;
 }
 
-/**
- * Parsuje řetězec HH:MM:SS na minuty.
- * @param {string} s – Řetězec s časem (podporuje HH:MM:SS i HH:MM)
- * @returns {number} – Celkový čas v minutách
- */
+/** Parsuje řetězec HH:MM:SS nebo HH:MM na minuty */
 function parseHMS(s) {
+    if (!s) return 0;
     let p = s.split(':').map(v => parseFloat(v) || 0);
     if (p.length === 3) return p[0] * 60 + p[1] + p[2] / 60;
     if (p.length === 2) return p[0] * 60 + p[1];
@@ -139,77 +110,96 @@ function parseHMS(s) {
 
 
 // ============================================
-// SYNCHRONIZACE SE SERVEREM
+// NOČNÍ ÚSEKY (SUNCALC)
 // ============================================
 
-/**
- * Odešle aktualizaci jednoho úseku na server.
- * Volá se při označení úseku jako doběhnutého nebo při změně času.
- *
- * @param {number}  idx        – Index úseku (0-indexed)
- * @param {boolean} isDone     – Zda je úsek označen jako doběhnutý
- * @param {string}  actualTime – Skutečný čas úseku (HH:MM:SS)
- */
-async function pushUpdateToServer(idx, isDone, actualTime) {
-    try {
-        await fetch(`/api/race/${RACE_ID}/update`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ index: idx, is_done: isDone, actual_time: actualTime })
-        });
-    } catch (e) { console.error("Chyba při ukládání na server", e); }
+/** Určí, zda úsek probíhá v noci pro souřadnice Prahy */
+function isNightRun(startTime, endTime) {
+    const lat = 50.073658;
+    const lng = 14.418540;
+
+    let current = new Date(startTime.getTime());
+    let end = new Date(endTime.getTime());
+
+    let totalMinutes = (end.getTime() - current.getTime()) / 60000;
+    if (totalMinutes <= 0) return false;
+
+    const sunData = {};
+
+    while (current < end) {
+        const dateStr = `${current.getFullYear()}-${current.getMonth() + 1}-${current.getDate()}`;
+
+        if (!sunData[dateStr]) {
+            const times = SunCalc.getTimes(current, lat, lng);
+            const sunriseExtended = new Date(times.sunrise.getTime() + 30 * 60000);
+            const sunsetExtended = new Date(times.sunset.getTime() - 30 * 60000);
+
+            sunData[dateStr] = {
+                sunriseExtended,
+                sunsetExtended
+            };
+        }
+
+        const daySun = sunData[dateStr];
+
+        if (current < daySun.sunriseExtended || current >= daySun.sunsetExtended) {
+            return true;
+        }
+
+        current = new Date(current.getTime() + 60000);
+    }
+
+    return false;
 }
 
-/**
- * Periodicky stahuje aktuální stav závodu ze serveru.
- * Pokud se data liší od lokálního stavu (např. jiný uživatel
- * označil úsek), aktualizuje DOM a přepočítá časy.
- */
-async function pollServer() {
-    try {
-        let res = await fetch(`/api/race/${RACE_ID}`);
-        if (!res.ok) return;
-        let data = await res.json();
-        let needRecalc = false;
 
-        data.segments.forEach((seg, i) => {
-            let box = document.getElementById(`seg-${i}`);
-            let chk = box.querySelector('.status-check input');
-            let inp = box.querySelector('.actual-time-input');
-            let inputWrap = box.querySelector('.actual-input-wrap');
+// ============================================
+// KOEFICIENT EKVIVALENTNÍ VZDÁLENOSTI
+// ============================================
 
-            // Ošetření starých záznamů v databázi, kde chybí hodnoty
-            let serverIsDone = seg.is_done || false;
-            let serverTime = seg.actual_time || "";
+/** Vypočítá předpokládaný čas běžce na daném úseku */
+function calculateExpectedTime(runner, segmentDistKm, segmentElev) {
+    if (!runner) return 0;
 
-            // Pokud se data ze serveru liší od lokálních, aktualizuj DOM
-            if (chk.checked !== serverIsDone || inp.value !== serverTime) {
-                chk.checked = serverIsDone;
-                inp.value = serverTime;
-                inputWrap.style.display = serverIsDone ? 'block' : 'none';
-                needRecalc = true;
-            }
-        });
-        if (needRecalc) recalculateAll();
-    } catch (e) { console.error("Chyba synchronizace", e); }
+    let ctrlTimeMin = runner.ctrl_time_min;
+    if (!ctrlTimeMin && runner.ctrl_time_hms) {
+        ctrlTimeMin = parseHMS(runner.ctrl_time_hms);
+    }
+
+    const ctrlDistKm = runner.ctrl_dist_m / 1000.0;
+    const ctrlEqDist = ctrlDistKm + (runner.ctrl_elev / 100.0);
+    const runnerPaceMinPerKm = ctrlEqDist > 0 ? (ctrlTimeMin / ctrlEqDist) : 0;
+
+    const segEqDist = segmentDistKm + (segmentElev / 100.0);
+    return runnerPaceMinPerKm * segEqDist;
 }
 
-/** Spustí kontrolu nových dat každých 10 sekund */
-setInterval(pollServer, 10000);
-
 
 // ============================================
-// OVLÁDÁNÍ ÚSEKŮ (checkbox, čas)
+// UKLÁDÁNÍ STAVU ZÁVODU DO LOCALSTORAGE
 // ============================================
 
 /**
- * Zpracuje kliknutí na checkbox „doběhnuto" u úseku.
- * Při zaškrtnutí předvyplní skutečný čas predikovanou hodnotou
- * (s ohledem na předchozí výkon běžce).
- *
- * @param {number}           idx – Index úseku (0-indexed)
- * @param {HTMLInputElement} cb  – Checkbox element
+ * Aktualizuje stav úseku a zapíše jej do localStorage.
  */
+function pushUpdateToServer(idx, isDone, actualTime) {
+    if (window.segmentsData && window.segmentsData[idx]) {
+        window.segmentsData[idx].is_done = isDone;
+        window.segmentsData[idx].actual_time = actualTime;
+
+        // Uložit do localStorage
+        if (typeof saveCurrentRaceToLocalStorage === 'function') {
+            saveCurrentRaceToLocalStorage();
+        }
+    }
+}
+
+
+// ============================================
+// OVLÁDÁNÍ ÚSEKŮ
+// ============================================
+
+/** Zpracuje změnu checkboxu doběhnutí */
 function toggleDone(idx, cb) {
     const box = document.getElementById(`seg-${idx}`);
     const inputWrap = box.querySelector('.actual-input-wrap');
@@ -217,22 +207,16 @@ function toggleDone(idx, cb) {
 
     inputWrap.style.display = cb.checked ? 'block' : 'none';
 
-    // Předvyplnění použije dynamicky predikovaný čas (včetně koeficientu běžce)
     if (cb.checked && (!inputEl.value || inputEl.value === 'undefined')) {
         const predictedMin = parseFloat(box.dataset.predictedMin || box.dataset.plannedMin);
         inputEl.value = formatHMS(predictedMin);
     }
 
-    let actualTime = inputEl.value;
-    pushUpdateToServer(idx, cb.checked, actualTime);
+    pushUpdateToServer(idx, cb.checked, inputEl.value);
     recalculateAll();
 }
 
-/**
- * Uloží ručně zadaný čas úseku na server.
- * @param {number}           idx     – Index úseku (0-indexed)
- * @param {HTMLInputElement} inputEl – Input s časem
- */
+/** Zpracuje změnu skutečného času */
 function saveTimeInput(idx, inputEl) {
     const box = document.getElementById(`seg-${idx}`);
     const isDone = box.querySelector('.status-check input').checked;
@@ -242,52 +226,79 @@ function saveTimeInput(idx, inputEl) {
 
 
 // ============================================
-// PŘEPOČET VŠECH ČASŮ
+// PŘEPOČET ČASŮ (CLIENT-SIDE)
 // ============================================
 
-/**
- * Hlavní funkce pro přepočet všech časů v závodu.
- *
- * Pro každý úsek:
- *   1. Vezme plánovaný čas (dataset.plannedMin)
- *   2. Pokud má běžec předchozí výkon, aplikuje koeficient
- *      (např. pokud běžel o 10% pomaleji, predikce se zvýší)
- *   3. Pokud je úsek „doběhnutý", použije skutečný čas
- *   4. Aktualizuje DOM: start, trvání, tempo, ETA předávky
- *   5. Vypočítá souhrnné hodnoty (celkový čas, čas doběhu)
- */
+/** Přepočítá kompletně startovní časy, doběhy a odchylky */
 function recalculateAll() {
-    let currentTime = new Date(START_ISO);
+    if (!window.START_ISO) return;
+
+    let currentTime = new Date(window.START_ISO);
     document.getElementById('total-start-time').innerText = formatTime(currentTime);
 
     let totalMin = 0;
     runnerFactors = {};
 
+    // Vynulovat etapy běžců
+    window.runnersData.forEach(r => r.run_count = 0);
+
     const boxes = document.querySelectorAll('.segment-box');
     boxes.forEach((box, i) => {
-        const runner = box.dataset.runner;
-        const plannedMin = parseFloat(box.dataset.plannedMin);
+        const seg = window.segmentsData[i];
+        const segId = seg.id;
+
+        const runnerObj = window.runnersData.find(r => r.segments && r.segments.includes(segId));
+
+        let runnerName = 'Nepřiřazeno';
+        let runnerColor = '#dddddd';
+        let runnerIteration = 0;
+        let plannedMin = 0;
+
+        if (runnerObj) {
+            runnerObj.run_count = (runnerObj.run_count || 0) + 1;
+            runnerName = runnerObj.name;
+            runnerColor = runnerObj.color || '#808080';
+            runnerIteration = runnerObj.run_count;
+            plannedMin = calculateExpectedTime(runnerObj, parseFloat(seg.dist), parseFloat(seg.elev_up));
+        }
+
+        // Nastavit border a badge běžce v DOM
+        box.style.borderLeftColor = runnerColor;
+        const rBadge = box.querySelector('.runner-badge');
+        if (rBadge) {
+            rBadge.style.backgroundColor = runnerColor;
+            rBadge.innerText = runnerName;
+        }
+        const rIter = box.querySelector('.runner-iter-val');
+        if (rIter) {
+            rIter.innerText = runnerIteration;
+        }
+
+        box.dataset.runner = runnerName;
+        box.dataset.plannedMin = plannedMin;
+
+        // Synchronizovat s segmentsData pro další moduly
+        seg.planned_duration_min = plannedMin;
+        seg.runner = runnerName;
+        seg.runner_color = runnerColor;
+        seg.runner_iteration = runnerIteration;
+
         const isDone = box.querySelector('.status-check input').checked;
         const actualInput = box.querySelector('.actual-time-input').value;
 
         let duration = plannedMin;
 
-        // Adaptivní predikce: Zohlednění předchozího výkonu TOHOTO běžce
-        // runnerFactors[runner] = poměr skutečného/plánovaného času z posledního úseku
-        if (!isDone && runnerFactors[runner]) {
-            duration *= runnerFactors[runner];
+        // Adaptivní koeficienty
+        if (!isDone && runnerFactors[runnerName]) {
+            duration *= runnerFactors[runnerName];
         }
 
-        // Uložíme predikovaný čas do datasetu, aby ho toggleDone mohl přečíst
         box.dataset.predictedMin = duration;
 
         if (isDone && actualInput.includes(':')) {
-            // Úsek je doběhnutý – použijeme skutečný čas
             duration = parseHMS(actualInput);
-            // Aktualizace koeficientu pro tohoto běžce
-            runnerFactors[runner] = duration / plannedMin;
+            runnerFactors[runnerName] = duration / plannedMin;
 
-            // Zobrazení odchylky od plánu (zelená = rychlejší, červená = pomalejší)
             let diff = duration - plannedMin;
             let diffTag = box.querySelector('.diff-tag');
             diffTag.innerText = `(${formatDiff(diff)})`;
@@ -296,111 +307,68 @@ function recalculateAll() {
             box.querySelector('.diff-tag').innerText = '';
         }
 
-        // Aktualizace textu startu a trvání
         box.querySelector('.start-time-text').innerText = `Start ${formatTime(currentTime)}`;
         let labelType = isDone && actualInput.includes(':') ? 'zaběhnuto' : 'odhad';
         box.querySelector('.duration-text').innerText = `${labelType} ${formatHM(duration)}`;
 
-        // Výpočet a zobrazení tempa (min/km)
-        let pace = duration / parseFloat(segmentsData[i].dist);
+        let pace = parseFloat(seg.dist) > 0 ? (duration / parseFloat(seg.dist)) : 0;
         box.querySelector('.pace-val').innerText = `${Math.floor(pace)}:${Math.floor((pace % 1) * 60).toString().padStart(2, '0')} /km`;
 
-        // Posun aktuálního času a zobrazení ETA předávky
+        let segmentStart = new Date(currentTime.getTime());
         currentTime = new Date(currentTime.getTime() + duration * 60000);
+        let segmentEnd = new Date(currentTime.getTime());
+
+        let isNight = isNightRun(segmentStart, segmentEnd);
+        const nightBadge = box.querySelector('.night-badge');
+        if (isNight) {
+            box.classList.add('night-mode');
+            if (nightBadge) nightBadge.style.display = 'inline-block';
+        } else {
+            box.classList.remove('night-mode');
+            if (nightBadge) nightBadge.style.display = 'none';
+        }
+
         box.querySelector('.eta-text strong').innerText = formatTime(currentTime);
         totalMin += duration;
     });
 
-    // Souhrnné hodnoty v záhlaví
     document.getElementById('total-duration').innerText = formatHM(totalMin);
     document.getElementById('total-finish-time').innerText = formatTime(currentTime);
 }
 
 
 // ============================================
-// NASTAVENÍ ZÁVODU (MODAL)
+// OBECNÉ NASTAVENÍ ZÁVODU (MODAL)
 // ============================================
 
-/** Otevře modální okno s nastavením závodu */
 function openSettingsModal() {
     document.getElementById('settingsModal').style.display = 'block';
 }
 
-/** Zavře modální okno s nastavením závodu */
 function closeSettingsModal() {
     document.getElementById('settingsModal').style.display = 'none';
 }
 
-/**
- * Uloží změny obecného nastavení závodu (název, start) na server.
- * Po úspěšném uložení provede reload stránky, aby se změny promítly.
- */
-async function saveGeneralSettings() {
+/** Uloží název a startovní čas lokálně do localStorage a přepočítá časy */
+function saveGeneralSettings() {
     const newName = document.getElementById('editRaceName').value;
     const newStart = document.getElementById('editStartTime').value;
 
-    try {
-        let res = await fetch(`/api/race/${RACE_ID}/edit_settings`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                race_name: newName,
-                start_iso: newStart,
-                runners: runnersData
-            })
-        });
+    if (!window.RACE_ID) return;
 
-        let data = await res.json();
-        if (data.status === 'success') {
-            window.location.reload();
-        } else {
-            alert("Chyba při ukládání: " + (data.error || "Neznámá chyba"));
-        }
-    } catch (e) {
-        alert("Nepodařilo se uložit změny.");
-        console.error(e);
+    const races = getRacesFromLocalStorage();
+    if (races[window.RACE_ID]) {
+        races[window.RACE_ID].name = newName;
+        races[window.RACE_ID].start_time = newStart;
+
+        // Uložit do localStorage
+        saveRacesToLocalStorage(races);
+
+        // Aktualizovat globální proměnné v paměti
+        window.START_ISO = newStart;
+        document.getElementById('step3-race-title').innerText = newName;
+
+        closeSettingsModal();
+        recalculateAll();
     }
 }
-
-
-// ============================================
-// ZAVÍRÁNÍ MODÁLŮ KLIKNUTÍM MIMO OBSAH
-// ============================================
-
-/**
- * Globální handler pro zavírání modálních oken a dropdownu
- * kliknutím na překryvnou vrstvu (mimo obsah modálu).
- */
-window.onclick = function (event) {
-    const modal = document.getElementById('settingsModal');
-    const analysisModal = document.getElementById('analysisModal');
-    const smartGenModal = document.getElementById('smartGenModal');
-    const logisticsModal = document.getElementById('logisticsModal');
-    const dropdown = document.getElementById('segmentsDropdown');
-
-    if (event.target == modal) {
-        modal.style.display = "none";
-    }
-    if (event.target == analysisModal) {
-        analysisModal.style.display = "none";
-    }
-    if (event.target == smartGenModal) {
-        smartGenModal.style.display = "none";
-    }
-    if (event.target == logisticsModal) {
-        logisticsModal.style.display = "none";
-    }
-
-    // Zavřít dropdown, pokud se klikne mimo
-    if (dropdown && dropdown.classList.contains('active')) {
-        if (!dropdown.contains(event.target)) {
-            dropdown.classList.remove('active');
-        }
-    }
-}
-
-/** Po načtení stránky spustíme přepočet všech časů */
-window.onload = function() {
-    ensureRunnersData();
-    recalculateAll();
-};

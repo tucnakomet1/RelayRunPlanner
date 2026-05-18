@@ -5,8 +5,28 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RelayRunPlanner</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/icon/RelayRunPlanner_150.png') }}">
+    <link rel="stylesheet" href="static/style.css">
+    <link rel="icon" type="image/png" href="static/img/icon/RelayRunPlanner_150.png">
+
+    <!-- Externí CDN knihovny pro výpočty -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.8.0/suncalc.min.js"></script>
+    <script>
+        var module = { exports: {} };
+        var exports = module.exports;
+    </script>
+    <script src="static/js/glpk.min.js"></script>
+    <script>var GLPK = module.exports;</script>
+    <script src="static/js/glpk_wasm.js"></script>
+
+    <!-- Globální klientský stav závodu (pro klientské JS moduly) -->
+    <script>
+        var START_ISO = "";
+        var RACE_ID = "";
+        var segmentsData = [];
+        var runnersData = [];
+        var cachedLogisticsData = null;
+        var cachedLogisticsConfig = null;
+    </script>
 </head>
 
 <body>
@@ -14,8 +34,8 @@
          HLAVIČKA – název aplikace + přepínač motivu
          ============================================ -->
     <header>
-        <h1 style="display: flex; align-items: center; gap: 10px;">
-            <img src="{{ url_for('static', filename='img/icon/RelayRunPlanner_150.png') }}" alt="RelayRunPlanner logo"
+        <h1 style="display: flex; align-items: center; gap: 10px; cursor: pointer;" onclick="window.location.hash=''">
+            <img src="static/img/icon/RelayRunPlanner_150.png" alt="RelayRunPlanner logo"
                 style="height: 32px; width: 32px; object-fit: contain;">
             RelayRunPlanner
         </h1>
@@ -27,88 +47,70 @@
 
     <main>
         <!-- ============================================
-             KROK 1 – Úvodní stránka (nový závod + seznam)
+             KROK 1 – Úvodní dashboard (vytvoření + seznam)
              ============================================ -->
-        {% if step == 1 %}
-        <section class="card fade-in">
+        <section id="step-1" class="card fade-in" style="display: none;">
             <h2>Základní informace</h2>
-            <!-- Formulář pro vytvoření nového závodu -->
-            <form action="/step2" method="POST">
+            <form onsubmit="handleCreateNewRace(event)">
                 <div class="form-group">
                     <label>Název závodu:</label>
-                    <input type="text" name="race_name" placeholder="Např. VltavaRun 2026" required>
+                    <input type="text" id="newRaceName" placeholder="Např. VltavaRun 2026" required>
                 </div>
                 <div class="form-group">
                     <label>Start závodu:</label>
-                    <input type="datetime-local" name="start_time" required>
+                    <input type="datetime-local" id="newStartTime" required>
                 </div>
                 <div class="form-group">
                     <label>Celkový počet úseků:</label>
-                    <input type="number" name="segment_count" min="1" placeholder="Např. 36" required>
+                    <input type="number" id="newSegmentCount" min="1" placeholder="Např. 36" required>
                 </div>
                 <button type="submit" class="btn btn-primary">Vytvořit nový závod ➔</button>
             </form>
 
-            <!-- Seznam existujících závodů z databáze -->
-            {% if existing_races %}
-            <div class="existing-races-section"
-                style="margin-top: 3rem; border-top: 1px solid var(--border-color); padding-top: 2rem;">
+            <div id="existing-races-section" class="existing-races-section"
+                style="margin-top: 3rem; border-top: 1px solid var(--border-color); padding-top: 2rem; display: none;">
                 <h3 style="color: var(--primary); margin-bottom: 1.5rem;">Uložené závody</h3>
-                <div class="race-list">
-                    {% for race in existing_races %}
-                    <div class="race-link-wrapper" style="position: relative;">
-                        <a href="/race/{{ race.id }}" class="race-link-item">
-                            <span class="race-link-icon">🏃</span>
-                            <span class="race-link-name">{{ race.name }}</span>
-                            <span class="race-link-arrow">➔</span>
-                        </a>
-                        <button onclick="confirmDeleteRace('{{ race.id }}', '{{ race.name }}')" class="btn-delete-race"
-                            title="Smazat závod">×</button>
-                    </div>
-                    {% endfor %}
+                <div class="race-list" id="race-list">
+                    <!-- Sem JS vygeneruje seznam uložených závodů -->
                 </div>
             </div>
-            {% endif %}
         </section>
 
         <!-- ============================================
-             KROK 2 – Formulář pro nastavení týmu a běžců
+             KROK 2 – Nastavení týmu, běžců a tras
              ============================================ -->
-        {% elif step == 2 %}
-        <section class="card fade-in">
-            <h2>Detail týmu - {{ race_name }}</h2>
-            <form action="/result" method="POST" enctype="multipart/form-data" id="raceForm">
-                <input type="hidden" name="race_name" value="{{ race_name }}">
-                <input type="hidden" name="start_time" value="{{ start_time }}">
-
-                <!-- Upload JSON souboru s trasou -->
+        <section id="step-2" class="card fade-in" style="display: none;">
+            <h2 id="step2-header-title">Detail týmu</h2>
+            <form id="raceForm" onsubmit="handleGeneratePlan(event)">
+                <!-- Upload JSON souboru s trasou a předvolené šablony -->
                 <div class="form-group upload-box">
                     <label>Nahrát trasu (JSON soubor):</label>
-                    <p class="hint">Nejprve si stáhni prázdnou šablonu pro {{ segment_count }} úseků, doplň ji a nahraj
-                        zpět.
-                        {% if segment_count in [15, 24, 36] %}
-                        Nebo si stáhni a uprav předvyplněný plán pro tento závod!
-                        {% endif %}
+                    <p class="hint" id="step2-hint-text">
+                        Nejprve si stáhni prázdnou šablonu, doplň ji a nahraj zpět.
                     </p>
                     <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px;">
-                        <a href="/sample/json/{{ segment_count }}" class="btn btn-outline"
-                            style="width: auto; flex: 1; min-width: 250px; text-align: center;">⬇️ Stáhnout prázdný JSON
-                            ({{ segment_count }} úseků)</a>
-                        {% if segment_count == 15 %}
-                        <a href="/sample/prefilled/15" class="btn btn-outline"
-                            style="width: auto; flex: 1; min-width: 250px; border-color: var(--primary); color: var(--primary); font-weight: 600; text-align: center;">⬇️
-                            Použít JizeRun šablonu (15 úseků)</a>
-                        {% elif segment_count == 24 %}
-                        <a href="/sample/prefilled/24" class="btn btn-outline"
-                            style="width: auto; flex: 1; min-width: 250px; border-color: var(--primary); color: var(--primary); font-weight: 600; text-align: center;">⬇️
-                            Použít 250ČR šablonu (24 úseků)</a>
-                        {% elif segment_count == 36 %}
-                        <a href="/sample/prefilled/36" class="btn btn-outline"
-                            style="width: auto; flex: 1; min-width: 250px; border-color: var(--primary); color: var(--primary); font-weight: 600; text-align: center;">⬇️
-                            Použít Vltava Run šablonu (36 úseků)</a>
-                        {% endif %}
+                        <button type="button" id="downloadEmptyJsonBtn"
+                            onclick="downloadEmptyJson(window._totalSegments || (window._tempNewRace ? window._tempNewRace.segment_count : 15))"
+                            class="btn btn-outline"
+                            style="width: auto; flex: 1; min-width: 250px; text-align: center; cursor: pointer;">⬇️
+                            Stáhnout prázdný JSON</button>
+
+                        <button type="button" id="prefilled-15-btn" onclick="loadPrefilledTemplate(15)"
+                            class="btn btn-outline prefilled-btn"
+                            style="width: auto; flex: 1; min-width: 250px; border-color: var(--primary); color: var(--primary); font-weight: 600; text-align: center; display: none;">⬇️
+                            Použít JizeRun šablonu (15 úseků)</button>
+
+                        <button type="button" id="prefilled-24-btn" onclick="loadPrefilledTemplate(24)"
+                            class="btn btn-outline prefilled-btn"
+                            style="width: auto; flex: 1; min-width: 250px; border-color: var(--primary); color: var(--primary); font-weight: 600; text-align: center; display: none;">⬇️
+                            Použít 250ČR šablonu (24 úseků)</button>
+
+                        <button type="button" id="prefilled-36-btn" onclick="loadPrefilledTemplate(36)"
+                            class="btn btn-outline prefilled-btn"
+                            style="width: auto; flex: 1; min-width: 250px; border-color: var(--primary); color: var(--primary); font-weight: 600; text-align: center; display: none;">⬇️
+                            Použít Vltava Run šablonu (36 úseků)</button>
                     </div>
-                    <input type="file" name="route_file" accept=".json" required>
+                    <input type="file" id="routeFileInput" accept=".json" required>
                 </div>
 
                 <!-- Sekce pro hromadné nastavení kontrolního úseku -->
@@ -126,7 +128,8 @@
                             style="width: auto;">
                         <label style="margin: 0;">Stejný referenční úsek pro všechny</label>
                     </div>
-                    <!-- Globální inputy pro referenční úsek (skryté ve výchozím stavu) -->
+
+                    <!-- Globální inputy pro referenční úsek -->
                     <div id="globalControlInputs" style="display: none; gap: 15px; margin-top: 15px;">
                         <div style="flex: 1;">
                             <label>Délka referenčního úseku (m)</label>
@@ -139,34 +142,24 @@
                     </div>
                 </div>
 
-                <!-- Kontejner pro dynamicky generované karty běžců -->
+                <!-- Kontejner pro dynamické běžce -->
                 <div id="runnersContainer"></div>
 
-                <!-- Hidden input pro JSON data běžců -->
-                <input type="hidden" name="runners_data" id="runnersDataInput">
                 <div class="actions">
-                    <a href="/" class="btn btn-secondary">Zpět</a>
-                    <button type="submit" class="btn btn-primary" onclick="prepareSubmit(event)">Vygenerovat plán závodu
-                        🚀</button>
+                    <button type="button" onclick="window.location.hash=''" class="btn btn-secondary">Zpět</button>
+                    <button type="submit" class="btn btn-primary">Vygenerovat plán závodu 🚀</button>
                 </div>
             </form>
         </section>
 
-        <!-- Inline script: Jinja proměnná pro celkový počet úseků -->
-        <script>
-            window._totalSegments = {{ segment_count |default (0) }};
-        </script>
-
         <!-- ============================================
-             KROK 3 – Detail závodu (úseky, časy, běžci)
+             KROK 3 – Detail závodu (interaktivní úseky)
              ============================================ -->
-        {% elif step == 3 %}
-        <section class="fade-in">
-
+        <section id="step-3" class="fade-in" style="display: none;">
             <!-- Souhrnný box se záhlavím závodu -->
             <div class="summary-box-wrapper">
                 <div class="header-row">
-                    <h2 style="margin: 0;">{{ race_name }}</h2>
+                    <h2 id="step3-race-title" style="margin: 0;">Závod</h2>
                     <div class="header-actions">
                         <button class="btn btn-outline" style="padding: 0.5rem 1rem; width: auto; font-size: 0.9rem;"
                             onclick="openLogisticsModal()">🚗 Logistika</button>
@@ -176,7 +169,8 @@
                             onclick="openSettingsModal()">⚙️</button>
                     </div>
                 </div>
-                <!-- Souhrnné časy (start, běh, doběh) -->
+
+                <!-- Souhrnné časy (start, trvání, doběh) -->
                 <div class="summary-table-container">
                     <div class="summary-col">
                         <span class="lbl">Start</span>
@@ -194,75 +188,19 @@
             </div>
 
             <!-- Seznam úseků závodu -->
-            <div class="segments-container" id="segments-list">
-                {% for seg in segments %}
-                <div class="segment-box {% if seg.is_night %}night-mode{% endif %}" id="seg-{{ loop.index0 }}"
-                    data-index="{{ loop.index0 }}" data-planned-min="{{ seg.planned_duration_min }}"
-                    data-runner="{{ seg.runner }}" style="border-left-color: {{ seg.runner_color }};">
+            <div class="segments-container" id="segments-list"></div>
 
-                    <!-- Horní řádek: číslo, název, checkbox, badge běžce -->
-                    <div class="seg-top-row">
-                        <div class="seg-title">
-                            <span class="seg-id">{{ seg.id }}</span>
-                            <span class="seg-name">{{ seg.name }}</span>
-                            <label class="status-check" title="Označit jako doběhnuté">
-                                <input type="checkbox" style="display:none;" {% if seg.is_done %}checked{% endif %}
-                                    onchange="toggleDone({{ loop.index0 }}, this)">
-                                <span class="custom-chk"></span>
-                            </label>
-                        </div>
-                        <div class="seg-right-group">
-                            {% if seg.is_night %}<span class="badge night-badge">🌙 Noční</span>{% endif %}
-                            <span class="runner-badge" style="background-color: {{ seg.runner_color }};">{{ seg.runner
-                                }}</span>
-                        </div>
-                    </div>
-
-                    <!-- Časové údaje: start, odhad, skutečný čas -->
-                    <div class="seg-timing-row">
-                        <div class="timing-left">
-                            <span class="start-time-text">Start --:--</span>
-                            <span class="dot">•</span>
-                            <span class="duration-text">odhad {{ (seg.planned_duration_min // 60)|int }}h {{
-                                (seg.planned_duration_min % 60)|int }}m</span>
-                        </div>
-                        <div class="timing-right">
-                            <span class="diff-tag"></span>
-                            <div class="actual-input-wrap"
-                                style="display: {% if seg.is_done %}block{% else %}none{% endif %};">
-                                <input type="text" placeholder="HH:MM:SS" class="actual-time-input"
-                                    value="{{ seg.actual_time }}" onchange="saveTimeInput({{ loop.index0 }}, this)">
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Statistiky úseku (délka, stoupání, klesání, tempo) -->
-                    <div class="seg-stats-table">
-                        <div class="stat-col"><span>Délka</span><strong>{{ seg.dist }} km</strong></div>
-                        <div class="stat-col"><span>Stoupání</span><strong>↗ {{ seg.elev_up }}m</strong></div>
-                        <div class="stat-col"><span>Klesání</span><strong>↘ {{ seg.elev_down }}m</strong></div>
-                        <div class="stat-col"><span>Tempo</span><strong class="pace-val">--:--</strong></div>
-                    </div>
-
-                    <!-- Patička: obtížnost, etapa běžce, očekávaná předávka -->
-                    <div class="seg-footer">
-                        <span>Obtížnost {{ seg.difficulty }}/5 • {{ seg.runner_iteration }}. etapa běžce</span>
-                        <span class="eta-text">Očekávaná předávka v <strong>--:--</strong></span>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-
-            <!-- Odkaz na URL závodu a tlačítko pro nový závod -->
+            <!-- Patička s odkazem a návratem -->
             <div style="margin-top: 3rem; text-align: center;">
-                <p style="color: var(--text-muted); margin-bottom: 10px;">URL závodu: <strong
-                        style="user-select: all;">{{ request.url }}</strong></p>
-                <a href="/" class="btn btn-outline" style="width: auto;">Vytvořit nový závod</a>
+                <p style="color: var(--text-muted); margin-bottom: 10px;">Odkaz na tento závod: <strong
+                        id="race-url-display"
+                        style="user-select: all; cursor: pointer; word-break: break-all; color: var(--primary);"></strong>
+                </p>
+                <button type="button" onclick="window.location.hash=''" class="btn btn-outline"
+                    style="width: auto;">Vytvořit nový závod</button>
             </div>
 
-            <!-- ==========================================
-                 MODAL: Nastavení závodu (název, start)
-                 ========================================== -->
+            <!-- MODAL: Nastavení závodu -->
             <div id="settingsModal" class="modal">
                 <div class="modal-content card-settings">
                     <div class="modal-header">
@@ -272,11 +210,11 @@
                     <div class="modal-body">
                         <div class="form-group" style="margin-bottom: 15px;">
                             <label>Název závodu:</label>
-                            <input type="text" id="editRaceName" value="{{ race_name }}">
+                            <input type="text" id="editRaceName" value="">
                         </div>
                         <div class="form-group" style="margin-bottom: 25px;">
                             <label>Start závodu:</label>
-                            <input type="datetime-local" id="editStartTime" value="{{ start_iso[:16] }}">
+                            <input type="datetime-local" id="editStartTime" value="">
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -288,19 +226,19 @@
                 </div>
             </div>
 
-            <!-- ==========================================
-                 SIDEBAR: Seznam běžců
-                 ========================================== -->
+            <!-- SIDEBAR: Seznam běžců -->
             <div id="runnerSidebar" class="sidebar">
                 <div class="sidebar-header card-settings">
                     <h3>Běžci</h3>
                     <div class="sidebar-actions">
-                        <!-- Dropdown s generátorem úseků -->
+                        <button id="recalculateSegmentsBtn" onclick="regenerateAnalysis()" title="Přepočítat úseky"
+                            style="display: none; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; border-radius: 4px; border: 1px solid var(--border-color); background: transparent; cursor: pointer; font-size: 0.9rem; margin-right: 5px;">
+                            🔄
+                        </button>
                         <div class="sidebar-dropdown" id="segmentsDropdown">
                             <button onclick="toggleDropdown()" title="Generátor úseků"
                                 style="display: flex; align-items: center; gap: 8px;">
-                                <img src="{{ url_for('static', filename='img/line-segments-thin-svgrepo-com.svg') }}"
-                                    alt="Generátor úseků"
+                                <img src="static/img/line-segments-thin-svgrepo-com.svg" alt="Generátor úseků"
                                     style="width: 20px; height: 20px; filter: var(--icon-filter);">
                             </button>
                             <div class="sidebar-dropdown-content">
@@ -314,14 +252,10 @@
                         <button onclick="closeSidebar()" title="Zavřít">&times;</button>
                     </div>
                 </div>
-                <div class="sidebar-body" id="sidebarRunnersList">
-                    <!-- JS vygeneruje seznam běžců -->
-                </div>
+                <div class="sidebar-body" id="sidebarRunnersList"></div>
             </div>
 
-            <!-- ==========================================
-                 MODAL: Analýza vygenerovaných úseků
-                 ========================================== -->
+            <!-- MODAL: Analýza generovaných úseků -->
             <div id="analysisModal" class="modal">
                 <div class="modal-content" style="max-width: 800px;">
                     <div class="modal-header">
@@ -329,10 +263,10 @@
                         <span class="close" onclick="closeAnalysisModal()">&times;</span>
                     </div>
                     <div class="modal-body" id="analysisModalBody"
-                        style="max-height: 60vh; overflow-y: auto; padding-right: 10px;">
-                        <!-- JS vygeneruje karty -->
-                    </div>
+                        style="max-height: 60vh; overflow-y: auto; padding-right: 10px;"></div>
                     <div class="modal-footer">
+                        <button class="btn btn-outline" style="width: auto; padding: 0.5rem 1rem; margin-right: auto;"
+                            onclick="regenerateAnalysis()">🔄 Vygenerovat znovu</button>
                         <button class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;"
                             onclick="closeAnalysisModal()">Zahodit</button>
                         <button class="btn btn-primary" style="width: auto; padding: 0.5rem 1rem; margin-left: 10px;"
@@ -341,9 +275,7 @@
                 </div>
             </div>
 
-            <!-- ==========================================
-                 MODAL: Pokročilé generování s pravidly (Smart Gen)
-                 ========================================== -->
+            <!-- MODAL: Pokročilé Smart Gen generování -->
             <div id="smartGenModal" class="modal">
                 <div class="modal-content" style="max-width: 600px;">
                     <div class="modal-header">
@@ -351,14 +283,12 @@
                         <span class="close" onclick="closeSmartGenModal()">&times;</span>
                     </div>
                     <div class="modal-body" style="max-height: 65vh; overflow-y: auto; padding-right: 10px;">
-                        <!-- Minimální pauza mezi úseky -->
                         <div class="form-group" style="margin-bottom: 20px;">
                             <label>Minimální pauza mezi úseky (počet úseků):</label>
                             <input type="number" id="sgMinPause" value="3" min="0"
                                 style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color); box-sizing: border-box;">
                         </div>
 
-                        <!-- Počet aut -->
                         <div class="form-group" style="margin-bottom: 20px;">
                             <label>Počet aut v týmu:</label>
                             <input type="number" id="sgCarCount" value="2" min="1"
@@ -366,7 +296,6 @@
                                 onchange="updateSmartGenUI()">
                         </div>
 
-                        <!-- Checkbox pro centrálu -->
                         <div class="form-group" style="margin-bottom: 20px;">
                             <label
                                 style="display: flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
@@ -376,13 +305,11 @@
                             </label>
                             <p
                                 style="font-size: 0.85rem; color: var(--text-muted); margin-top: 5px; margin-left: 24px;">
-                                Např. závod 250 Český Ráj má centrálu v Sedmihorkách. Znamená to, že všichni běžci
-                                nemusí neustále přejíždět, ale mohou se vracet zpátky do centrály, kde se lidé v autech
-                                plynule prostřídají.
+                                Např. závod 250 Český Ráj má centrálu v Sedmihorkách. Běžci se mohou vracet zpět, což
+                                snižuje nároky na přejíždění.
                             </p>
                         </div>
 
-                        <!-- Preferovaní lidé v autech (skryto při centrále) -->
                         <div id="sgPreferredPeopleContainer"
                             style="display: none; margin-bottom: 20px; border-top: 1px solid var(--border-color); padding-top: 20px;">
                             <label
@@ -392,8 +319,17 @@
                                 <strong>Preferovaní lidé v autech</strong>
                             </label>
                             <div id="sgCarFormsContainer"
-                                style="display: none; display: flex; flex-direction: column; gap: 15px;">
-                                <!-- JS vygeneruje bloky pro auta -->
+                                style="display: none; display: flex; flex-direction: column; gap: 15px;"></div>
+                        </div>
+
+                        <!-- DIAGNOSTICKÝ LOG SOLVERU -->
+                        <div id="sgDiagnosticsContainer"
+                            style="display: none; margin-top: 20px; padding: 12px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-card); font-family: monospace; font-size: 0.85rem; box-sizing: border-box;">
+                            <h4
+                                style="margin-top: 0; margin-bottom: 8px; color: var(--text-primary); font-family: sans-serif;">
+                                Průběh optimalizace (ILP):</h4>
+                            <div id="sgDiagnosticsLog"
+                                style="max-height: 150px; overflow-y: auto; white-space: pre-wrap; color: var(--text-muted); line-height: 1.4;">
                             </div>
                         </div>
                     </div>
@@ -405,54 +341,10 @@
                     </div>
                 </div>
             </div>
-
         </section>
-
-        <!-- ==========================================
-             INLINE SCRIPT: Jinja proměnné pro Step 3
-             Tyto proměnné musí být definovány inline,
-             protože obsahují serverová data z Jinja šablon.
-             ========================================== -->
-        <script>
-            const START_ISO = "{{ start_iso }}";
-            const RACE_ID = "{{ race_id }}";
-            const segmentsData = {{ segments | tojson }};
-            let runnersData = {{ runners | tojson }};
-        </script>
-
-        <!-- Externí JS moduly pro Step 3 -->
-        <script src="{{ url_for('static', filename='js/race.js') }}"></script>
-        <script src="{{ url_for('static', filename='js/sidebar.js') }}"></script>
-        <script src="{{ url_for('static', filename='js/generator.js') }}"></script>
-        <script src="{{ url_for('static', filename='js/logistics.js') }}"></script>
-
-        <!-- Inicializace cached logistiky (Jinja data) -->
-        <script>
-            initLogisticsCache({{ logistics_data | tojson if logistics_data else 'null' }});
-        </script>
-        {% endif %}
     </main>
 
-    <!-- ============================================
-         GLOBÁLNÍ SKRIPTY (načítají se na každé stránce)
-         ============================================ -->
-
-    <!-- Přepínání motivu + mazání závodů -->
-    <script src="{{ url_for('static', filename='js/common.js') }}"></script>
-
-    <!-- Logika pro Step 2 (přidávání běžců) -->
-    <script src="{{ url_for('static', filename='js/setup.js') }}"></script>
-
-    <!-- Inicializace: pokud jsme ve Step 2, vygenerujeme prvního běžce -->
-    <script>
-        if (document.getElementById('runnersContainer')) {
-            generateRunners(1);
-        }
-    </script>
-
-    <!-- ==========================================
-         MODAL: Logistika aut (globální – mimo step bloky)
-         ========================================== -->
+    <!-- MODAL: Logistika aut (Globální) -->
     <div id="logisticsModal" class="modal">
         <div class="modal-content card-settings" style="max-width: 800px; width: 95%;">
             <div class="modal-header">
@@ -460,7 +352,7 @@
                 <span class="close" onclick="closeLogisticsModal()">&times;</span>
             </div>
             <div class="modal-body" style="max-height: 70vh; overflow-y: auto; padding-right: 10px;">
-                <!-- Stav 1: Uložená logistika (zobrazí se rovnou) -->
+                <!-- Stav 1: Zobrazení uložené logistiky -->
                 <div id="logisticsCachedView" style="display: none;">
                     <div id="logisticsCachedResultContainer"></div>
                     <div style="margin-top: 20px; text-align: center;">
@@ -469,7 +361,7 @@
                     </div>
                 </div>
 
-                <!-- Stav 2: Konfigurační formulář -->
+                <!-- Stav 2: Formulář konfigurace -->
                 <div id="logisticsConfigView" style="display: none;">
                     <div class="form-group" style="margin-bottom: 20px;">
                         <label>Počet aut v týmu:</label>
@@ -477,7 +369,6 @@
                             style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color); box-sizing: border-box;">
                     </div>
 
-                    <!-- Checkbox pro centrálu -->
                     <div class="form-group" style="margin-bottom: 20px;">
                         <label
                             style="display: flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
@@ -486,9 +377,7 @@
                             <strong>Máme centrálu</strong>
                         </label>
                         <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 5px; margin-left: 24px;">
-                            Algoritmus se pokusí chytře nasekat závod na různě velké výjezdy, abyste strávili na
-                            centrále co
-                            nejvíce klidného času bez přejíždění.
+                            Algoritmus rozdělí závod na chytře uspořádané výjezdy aut s prostřídáním na základně.
                         </p>
                     </div>
 
@@ -498,27 +387,33 @@
                         <label style="font-weight: 600; margin-bottom: 10px; display: block;">📍 Úseky
                             začínající/končící v centrále</label>
                         <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 15px;">
-                            Označte úseky, které začínají nebo končí přímo v centrále. U těchto úseků se nemusí
-                            přejíždět – běžec vybíhá z centrály / dobíhá do centrály.
+                            Označte úseky, u kterých běžci startují nebo dobíhají přímo do centrály.
                         </p>
                         <div id="centralSegmentsGrid"
                             style="max-height: 300px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; background: var(--bg-card, #fff);">
-                            <!-- JS vygeneruje seznam úseků -->
                         </div>
                     </div>
 
                     <button class="btn btn-primary" style="width: 100%;" onclick="calculateLogistics()">Vypočítat a
-                        zobrazit
-                        logistiku</button>
+                        zobrazit logistiku</button>
 
-                    <div id="logisticsResultContainer" style="margin-top: 30px;">
-                        <!-- Zde se vygenerují výsledky po přepočtu -->
-                    </div>
+                    <div id="logisticsResultContainer" style="margin-top: 30px;"></div>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- ============================================
+         JS APLIKAČNÍ SKRIPTY (ŘAZENÉ DLE ZÁVISLOSTÍ)
+         ============================================ -->
+    <script src="static/js/templates.js"></script>
+    <script src="static/js/common.js"></script>
+    <script src="static/js/setup.js"></script>
+    <script src="static/js/race.js"></script>
+    <script src="static/js/sidebar.js"></script>
+    <script src="static/js/generator.js"></script>
+    <script src="static/js/logistics.js"></script>
+    <script src="static/js/router.js"></script>
 </body>
 
 </html>

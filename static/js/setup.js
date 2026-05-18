@@ -1,30 +1,51 @@
 /**
- * setup.js – Logika pro Step 2 (přidávání členů týmu)
- *
- * Tento soubor se načítá pouze ve Step 2, kde uživatel:
- *   1. Nahraje JSON soubor s trasou
- *   2. Přidá běžce s kontrolními časy
- *   3. Přiřadí úseky (ručně nebo náhodně)
+ * setup.js – Logika pro Step 2 (přidávání členů týmu) a Step 1 (nový závod)
  *
  * Obsahuje:
+ *   - handleCreateNewRace()    – zpracuje vytvoření nového závodu a přechod do Kroku 2
  *   - addRunner()              – přidání karty běžce do formuláře
  *   - generateRunners()        – generování N karet běžců
  *   - toggleGlobalControl()    – přepínání globálního kontrolního úseku
  *   - toggleRandomSegments()   – přepnutí náhodného přiřazení úseků
  *   - generateSegmentFields()  – vygenerování inputů pro čísla úseků
- *   - prepareSubmit()          – sběr dat z formuláře před odesláním
- *   - pickRandomUnused()       – výběr náhodného úseku z intervalu
+ *   - loadPrefilledTemplate()  – klientské načtení předvyplněné trasy
+ *   - readRouteFile()          – asynchronní přečtení JSON souboru
+ *   - collectRunnersFromSetup()– sběr dat o běžcích z formuláře
+ *   - handleGeneratePlan()     – hlavní klientský uzel pro uložení nového závodu a přechod do Kroku 3
  */
 
 
 // ============================================
-// PŘIDÁNÍ KARTY BĚŽCE
+// KROK 1 – INICIACE ZÁVODU
+// ============================================
+
+/**
+ * Zpracuje odeslání úvodního formuláře a přesměruje uživatele do Kroku 2.
+ */
+function handleCreateNewRace(event) {
+    event.preventDefault();
+    const name = document.getElementById('newRaceName').value;
+    const start = document.getElementById('newStartTime').value;
+    const count = parseInt(document.getElementById('newSegmentCount').value);
+
+    // Uložit dočasnou konfiguraci do paměti
+    window._tempNewRace = {
+        name: name,
+        start_time: start,
+        segment_count: count
+    };
+
+    // Navigace na Step 2
+    window.location.hash = '#step2';
+}
+
+
+// ============================================
+// KROK 2 – PŘIDÁNÍ KARTY BĚŽCE
 // ============================================
 
 /**
  * Vytvoří HTML kartu pro jednoho běžce a přidá ji do kontejneru.
- * Karta obsahuje inputy pro jméno, kontrolní čas, úseky atd.
- * @param {number} index – Pořadové číslo běžce (1-indexed)
  */
 function addRunner(index) {
     const div = document.createElement('div');
@@ -48,8 +69,6 @@ function addRunner(index) {
     `;
     document.getElementById('runnersContainer').appendChild(div);
 
-    // Pokud je zapnuté globální nastavení kontrolního úseku, skryjeme
-    // individuální pole pro délku a převýšení
     const isGlobal = document.getElementById('globalControlCheck') ? document.getElementById('globalControlCheck').checked : false;
     if (isGlobal) {
         div.querySelector('.r-dist-wrapper').style.display = 'none';
@@ -59,14 +78,8 @@ function addRunner(index) {
     }
 }
 
-
-// ============================================
-// GENEROVÁNÍ BĚŽCŮ (dynamické přidávání / odebírání)
-// ============================================
-
 /**
  * Zajistí, aby v kontejneru bylo přesně 'count' karet běžců.
- * @param {number} count – Požadovaný počet běžců
  */
 function generateRunners(count) {
     count = parseInt(count) || 1;
@@ -74,12 +87,10 @@ function generateRunners(count) {
     const currentCount = container.children.length;
 
     if (count > currentCount) {
-        // Přidáme chybějící karty
         for (let i = currentCount; i < count; i++) {
             addRunner(i + 1);
         }
     } else if (count < currentCount) {
-        // Odebereme přebytečné karty (od konce)
         for (let i = currentCount; i > count; i--) {
             container.lastElementChild.remove();
         }
@@ -93,27 +104,28 @@ function generateRunners(count) {
 
 /**
  * Přepíná zobrazení společného vs. individuálního kontrolního úseku.
- * Pokud je zaškrtnuto, všichni běžci sdílí stejnou délku a převýšení
- * kontrolního úseku definovanou globálně.
- * @param {boolean} isChecked – Stav checkboxu
  */
 function toggleGlobalControl(isChecked) {
     const globalInputs = document.getElementById('globalControlInputs');
-    globalInputs.style.display = isChecked ? 'flex' : 'none';
+    if (globalInputs) {
+        globalInputs.style.display = isChecked ? 'flex' : 'none';
+    }
 
     const distInput = document.getElementById('globalControlDist');
     const elevInput = document.getElementById('globalControlElev');
     if (distInput) distInput.required = isChecked;
     if (elevInput) elevInput.required = isChecked;
 
-    // Skryje/zobrazí individuální pole u všech karet běžců
     document.querySelectorAll('.runner-card').forEach(card => {
         const distWrap = card.querySelector('.r-dist-wrapper');
         const elevWrap = card.querySelector('.r-elev-wrapper');
-        distWrap.style.display = isChecked ? 'none' : 'block';
-        elevWrap.style.display = isChecked ? 'none' : 'block';
-        card.querySelector('.r-dist').required = !isChecked;
-        card.querySelector('.r-elev').required = !isChecked;
+        if (distWrap) distWrap.style.display = isChecked ? 'none' : 'block';
+        if (elevWrap) elevWrap.style.display = isChecked ? 'none' : 'block';
+        
+        const distInp = card.querySelector('.r-dist');
+        const elevInp = card.querySelector('.r-elev');
+        if (distInp) distInp.required = !isChecked;
+        if (elevInp) elevInp.required = !isChecked;
     });
 }
 
@@ -124,13 +136,10 @@ function toggleGlobalControl(isChecked) {
 
 /**
  * Přepíná viditelnost inputů pro čísla úseků u konkrétního běžce.
- * Pokud je zaškrtnuto, úseky se přiřadí náhodně při odeslání.
- * @param {HTMLInputElement} checkbox – Checkbox „vybrat náhodně"
  */
 function toggleRandomSegments(checkbox) {
     const segContainer = checkbox.closest('.runner-card').querySelector('.seg-inputs');
     segContainer.style.display = checkbox.checked ? 'none' : 'flex';
-    // Zrušíme povinnost, pokud je kontejner schovaný
     segContainer.querySelectorAll('.r-seg-id').forEach(inp => {
         inp.required = !checkbox.checked;
     });
@@ -138,7 +147,6 @@ function toggleRandomSegments(checkbox) {
 
 /**
  * Vygeneruje inputy pro zadání čísel konkrétních úseků běžce.
- * @param {HTMLInputElement} inputEl – Input s počtem úseků
  */
 function generateSegmentFields(inputEl) {
     const count = parseInt(inputEl.value) || 0;
@@ -159,18 +167,83 @@ function generateSegmentFields(inputEl) {
 
 
 // ============================================
-// PŘÍPRAVA DAT PRO ODESLÁNÍ FORMULÁŘE
+// DŮVĚRYHODNÝ KLIENTSKÝ IMPORT A PŘEDBĚŽNÉ ŠABLONY
+// ============================================
+
+/**
+ * Vybere a načte staticky předvyplněnou šablonu trasy přímo z paměti.
+ * @param {number} count – Počet úseků trasy (15, 24, 36)
+ */
+function loadPrefilledTemplate(count) {
+    const templateData = window.PREFILLED_TEMPLATES ? window.PREFILLED_TEMPLATES[count] : null;
+    if (!templateData) {
+        alert("Předvyplněná šablona nebyla nalezena.");
+        return;
+    }
+
+    // Uložit do paměti jako rozpracovaný import
+    window._tempUploadedRoute = templateData;
+
+    // Zrušit povinnost nahrát soubor trasy
+    const fileInput = document.getElementById('routeFileInput');
+    fileInput.required = false;
+
+    // Vykreslit info o vybrané šabloně
+    let info = document.getElementById('template-loaded-info');
+    if (!info) {
+        info = document.createElement('p');
+        info.id = 'template-loaded-info';
+        info.style.color = 'var(--primary)';
+        info.style.fontWeight = 'bold';
+        info.style.marginTop = '10px';
+        fileInput.parentNode.insertBefore(info, fileInput.nextSibling);
+    }
+
+    let name = "";
+    if (count === 15) name = "JizeRun (15 úseků)";
+    if (count === 24) name = "250 km Českým rájem (24 úseků)";
+    if (count === 36) name = "Vltava Run (36 úseků)";
+
+    info.innerText = `✅ Vybrána předvyplněná šablona: ${name}`;
+
+    // Zvýraznění aktivního tlačítka
+    document.querySelectorAll('.prefilled-btn').forEach(btn => {
+        btn.style.backgroundColor = '';
+        btn.style.color = 'var(--primary)';
+    });
+    const activeBtn = document.getElementById(`prefilled-${count}-btn`);
+    if (activeBtn) {
+        activeBtn.style.backgroundColor = 'var(--primary)';
+        activeBtn.style.color = '#ffffff';
+    }
+}
+
+/**
+ * Asynchronně přečte nahraný JSON soubor.
+ */
+function readRouteFile(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const data = JSON.parse(event.target.result);
+                resolve(data);
+            } catch (e) {
+                reject(new Error("Soubor neobsahuje platný JSON formát."));
+            }
+        };
+        reader.onerror = () => reject(new Error("Chyba při čtení souboru."));
+        reader.readAsText(file);
+    });
+}
+
+
+// ============================================
+// SBĚR DATA BĚŽCŮ A VYTVOŘENÍ ZÁVODU
 // ============================================
 
 /**
  * Vybere náhodný nepoužitý úsek z daného intervalu.
- * Pokud je interval vyčerpaný, vybere jakýkoliv volný úsek.
- *
- * @param {number} minRange       – Dolní hranice intervalu (1-indexed)
- * @param {number} maxRange       – Horní hranice intervalu (1-indexed)
- * @param {Set}    usedSet        – Množina již přiřazených úseků
- * @param {number} totalSegments  – Celkový počet úseků v závodě
- * @returns {number|null} – Číslo vybraného úseku nebo null
  */
 function pickRandomUnusedSetup(minRange, maxRange, usedSet, totalSegments) {
     let available = [];
@@ -182,7 +255,6 @@ function pickRandomUnusedSetup(minRange, maxRange, usedSet, totalSegments) {
         usedSet.add(picked);
         return picked;
     }
-    // Fallback: Pokud v intervalu není nic volného, vyber cokoliv z celku
     for (let i = 1; i <= totalSegments; i++) {
         if (!usedSet.has(i)) {
             usedSet.add(i);
@@ -193,25 +265,16 @@ function pickRandomUnusedSetup(minRange, maxRange, usedSet, totalSegments) {
 }
 
 /**
- * Sbírá data ze všech karet běžců a uloží je jako JSON
- * do skrytého inputu pro odeslání formuláře.
- *
- * Logika:
- *   1. Posbírá ručně zadané úseky
- *   2. Pro běžce s "náhodným" přiřazením vygeneruje úseky
- *      rovnoměrně rozložené po trase (třetiny, čtvrtiny atd.)
- *   3. Uloží výsledek do hidden inputu #runnersDataInput
- *
- * @param {Event} e – Submit event formuláře
+ * Posbírá data o běžcích a jejich úsecích ze setup karet.
+ * @returns {Array} – Pole běžců
  */
-function prepareSubmit(e) {
+function collectRunnersFromSetup() {
     const runners = [];
     const globalCheck = document.getElementById('globalControlCheck');
     const isGlobalControl = globalCheck ? globalCheck.checked : false;
     const globalDist = parseFloat(document.getElementById('globalControlDist') ? document.getElementById('globalControlDist').value : 0);
     const globalElev = parseFloat(document.getElementById('globalControlElev') ? document.getElementById('globalControlElev').value : 0);
 
-    // 1. Posbírat ručně vybrané úseky (pro kontrolu kolizí)
     const manualSelectedSegs = new Set();
     document.querySelectorAll('.runner-card').forEach(card => {
         const isRandom = card.querySelector('.r-random-segs').checked;
@@ -223,22 +286,18 @@ function prepareSubmit(e) {
         }
     });
 
-    // Celkový počet úseků (z Jinja proměnné, nastaveno inline v HTML)
     const totalSegments = window._totalSegments || 0;
 
-    // 2. Zpracovat každou kartu běžce
-    document.querySelectorAll('.runner-card').forEach(card => {
+    document.querySelectorAll('.runner-card').forEach((card, rIdx) => {
         const isRandom = card.querySelector('.r-random-segs').checked;
         let segs = [];
         const segCount = parseInt(card.querySelector('.r-seg-count').value) || 0;
 
         if (!isRandom) {
-            // Ručně zadané úseky
             segs = Array.from(card.querySelectorAll('.r-seg-id'))
                 .map(inp => parseInt(inp.value))
                 .filter(v => !isNaN(v));
         } else {
-            // Náhodné rozdělení s ohledem na rovnoměrné rozložení
             if (segCount > 0 && totalSegments > 0) {
                 const intervalSize = totalSegments / segCount;
                 for (let k = 0; k < segCount; k++) {
@@ -250,15 +309,155 @@ function prepareSubmit(e) {
             }
         }
 
+        // Barevná paleta pro běžce (odlišitelné barvy)
+        const colors = [
+            '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899',
+            '#14b8a6', '#f97316', '#06b6d4', '#6366f1', '#a855f7', '#6b7280'
+        ];
+        const runnerColor = colors[rIdx % colors.length];
+        const ctrlHms = card.querySelector('.r-time').value;
+
         runners.push({
             name: card.querySelector('.r-name').value,
+            color: runnerColor,
             ctrl_dist_m: isGlobalControl ? globalDist : parseFloat(card.querySelector('.r-dist').value),
             ctrl_elev: isGlobalControl ? globalElev : parseFloat(card.querySelector('.r-elev').value),
-            ctrl_time_hms: card.querySelector('.r-time').value,
+            ctrl_time_hms: ctrlHms,
+            ctrl_time_min: parseHMS(ctrlHms),
+            target_count: segCount,
             segments: segs
         });
     });
 
-    // 3. Uložit JSON do hidden inputu
-    document.getElementById('runnersDataInput').value = JSON.stringify(runners);
+    return runners;
+}
+
+/**
+ * Zpracuje formulář Kroku 2, přečte soubor trasy, vytvoří závod a uloží jej.
+ */
+async function handleGeneratePlan(event) {
+    event.preventDefault();
+
+    let routeData = null;
+    if (window._tempUploadedRoute) {
+        routeData = window._tempUploadedRoute;
+    } else {
+        const fileInput = document.getElementById('routeFileInput');
+        if (!fileInput.files || fileInput.files.length === 0) {
+            alert("Prosím nahrajte JSON soubor s trasou nebo vyberte předvyplněnou šablonu.");
+            return;
+        }
+
+        try {
+            routeData = await readRouteFile(fileInput.files[0]);
+        } catch (err) {
+            alert("Nepodařilo se načíst trasu: " + err.message);
+            return;
+        }
+    }
+
+    if (!Array.isArray(routeData)) {
+        alert("Neplatný formát trasy. Soubor musí obsahovat seznam úseků.");
+        return;
+    }
+
+    // Posbírat běžce
+    const runners = collectRunnersFromSetup();
+    if (runners.length === 0) {
+        alert("Prosím přidejte alespoň jednoho běžce.");
+        return;
+    }
+
+    // Namapovat raw data z importu do standardizovaných segmentů
+    const segments = routeData.map(s => {
+        const distMeters = parseFloat(s.delka_km || s.dist || 0);
+        // Pokud je hodnota > 500, jde nejspíš o metry -> přepočítáme na km. Jinak je to v km.
+        const distKm = distMeters > 500 ? (distMeters / 1000.0) : distMeters;
+
+        return {
+            id: parseInt(s.usek_id || s.id),
+            name: s.nazev || s.name || `Úsek ${s.usek_id || s.id}`,
+            dist: distKm,
+            elev_up: parseFloat(s.stoupani_m || s.elev_up || 0),
+            elev_down: parseFloat(s.klesani_m || s.elev_down || 0),
+            difficulty: parseInt(s.obtiznost || s.difficulty || 3),
+            is_done: false,
+            actual_time: ""
+        };
+    });
+
+    // Vygenerovat unikátní ID závodu
+    const raceId = 'race-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+
+    const newRaceObj = {
+        id: raceId,
+        name: window._tempNewRace.name,
+        start_time: window._tempNewRace.start_time,
+        segment_count: window._tempNewRace.segment_count,
+        segments: segments,
+        runners: runners,
+        logistics: null
+    };
+
+    // Uložit do localStorage
+    saveRaceToLocalStorage(newRaceObj);
+
+    // Vyčistit setup states
+    window._tempNewRace = null;
+    window._tempUploadedRoute = null;
+
+    // Přepnout na detail nového závodu!
+    window.location.hash = `#race/${raceId}`;
+}
+
+
+// ============================================
+// POMOCNÝ GENERÁTOR PRÁZDNÉHO JSONU
+// ============================================
+
+/**
+ * Vygeneruje a stáhne prázdnou JSON šablonu pro N úseků přímo v prohlížeči.
+ */
+function downloadEmptyJson(n) {
+    const data = [];
+    for (let i = 1; i <= n; i++) {
+        data.push({
+            usek_id: i,
+            nazev: "",
+            delka_km: "",
+            stoupani_m: "",
+            klesani_m: "",
+            obtiznost: ""
+        });
+    }
+
+    const jsonString = JSON.stringify(data, null, 4);
+    const blob = new Blob([jsonString], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `plan_${n}.json`;
+    document.body.appendChild(a);
+    a.click();
+
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+// Bind click handler dynamically
+function initDownloadButton() {
+    const btn = document.getElementById('downloadEmptyJsonBtn');
+    if (btn) {
+        btn.onclick = () => {
+            const count = window._totalSegments || (window._tempNewRace ? window._tempNewRace.segment_count : 15);
+            downloadEmptyJson(count);
+        };
+    }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initDownloadButton);
+} else {
+    initDownloadButton();
 }
