@@ -15,28 +15,67 @@ body {
     background-attachment: fixed;       /* Gradient zůstane fixní při scrollování */
     font-family: 'Inter', sans-serif;
     color: var(--text-main);
+    overflow-x: hidden;
 }
 
 /* --- Horní lišta --- */
-header {
+header,
+.app-header {
     background: var(--card-bg);
     padding: 1rem 2rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 12px;
     box-shadow: var(--shadow);
     border-bottom: 1px solid var(--border-color);
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 /* Název aplikace s gradientem */
-header h1 {
+header h1,
+.app-title {
     margin: 0;
     font-size: 1.8rem;
     font-weight: 900;
     background: linear-gradient(to right, var(--primary), #fbbf24);
     -webkit-background-clip: text;
+    background-clip: text;
     -webkit-text-fill-color: transparent;
     letter-spacing: -0.5px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.app-logo {
+    height: 32px;
+    width: 32px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+.app-title-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.header-theme {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.header-theme-label {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--text-muted);
 }
 
 /* Tlačítko přepínání světlý/tmavý režim */
@@ -46,6 +85,8 @@ header h1 {
     font-size: 1.5rem;
     cursor: pointer;
     filter: grayscale(0.2);
+    padding: 0;
+    line-height: 1;
 }
 
 /* --- Centrální obsahová oblast --- */

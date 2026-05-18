@@ -2,7 +2,6 @@
   <a href="#cíl">Cíl</a> •
   <a href="#hlavní-funkce">Hlavní funkce</a> •
   <a href="#spuštění">Spuštění</a> •
-  <a href="#github-pages">GitHub Pages</a> •
   <a href="#použití">Použití</a> •
   <a href="#jak-to-funguje">Jak to funguje</a> •
   <a href="#galerie">Galerie</a> •
@@ -40,6 +39,7 @@ Aplikace byla vytvořena k plánování štafetového závodu s 5 až 12 běžci
 * **Dynamická predikce časů:** Výpočet očekávaného času na základě délky, stoupání a individuálního tempa z kontrolního běhu (koeficient: 100 m převýšení = 1 km roviny).
 * **Automatická detekce nočních úseků:** Výpočet času východu a západu slunce pro dané datum a souřadnice (knihovna [SunCalc](https://github.com/mourner/suncalc) z CDN), úseky vyžadující čelovku jsou označeny (tolerance 30 minut).
 * **Sledování průběhu závodu:** Odškrtávání hotových úseků a zadávání reálných časů; aplikace přepočítá predikované starty a doběhy zbývajících úseků.
+* **Bezserverové sdílení stavu:** Aktuální průběh závodu (reálné časy doběhů, přiřazení běžců) lze poslat odkazem nebo QR kódem – druhý uživatel si ho importuje do svého prohlížeče (localStorage), bez backendu.
 * **Offline-first:** Po načtení stránky funguje bez serveru; závody přežijí obnovení prohlížeče díky localStorage.
 * **Předvyplněné trasy:** Šablony pro JizeRun (15 úseků), 250ČR (24) a Vltava Run (36) jsou součástí aplikace.
 
@@ -60,7 +60,10 @@ python3 -m http.server 8080
 
 Poté otevřete v prohlížeči např. [http://localhost:8080/](http://localhost:8080/) (nebo port, který server vypíše).
 
-*Dřívější verze běžela na **Pythonu (Flask)** s knihovnami PuLP a Astral. Aktuální verze je kompletně přepsaná do JavaScriptu – soubor `requirements.txt` je pozůstatek a pro běh aplikace se nepoužívá.*
+> [!NOTE]
+> **Sdílení mezi telefony** vyžaduje HTTP/HTTPS adresu (localhost, GitHub Pages apod.). Při otevření souboru přes `file://` lze odkaz zkopírovat, ale QR kód pro sdílení na jiné zařízení nefunguje.
+
+*Dřívější verze běžela na **Pythonu (Flask)** s knihovnami PuLP a Astral. Aktuální verze je kompletně přepsaná do JavaScriptu*
 
 ## Použití
 
@@ -144,7 +147,25 @@ Tlačítko **„Logistika“** v záhlaví:
 * **S centrálou:** Výjezdy 2–4 úseky, role Outbound / Returning, volitelné označení úseků začínajících/končících v centrále.
 
 Výsledek logistiky se ukládá k závodu v localStorage.
-\
+
+#### D. Sdílení stavu závodu
+
+Na dashboardu závodu (krok 3) tlačítko **„🔗 Sdílet stav“** v záhlaví:
+
+1. Aplikace uloží aktuální závod z localStorage (včetně označených úseků **Hotovo** a zadaných reálných časů).
+2. Stav se zkomprimuje ([LZ-String](https://pieroxy.net/blog/pages/lz-string/index.html)) a vloží do URL za hashtag: `index.html#race_data=…`
+3. V modalu se zobrazí **QR kód** odkazu a pole pro **zkopírování** – druhý člen týmu ho otevře na telefonu nebo naskenuje QR.
+
+**Import na druhém zařízení:** Po otevření odkazu se závod automaticky uloží do localStorage a zobrazí se dashboard. Pokud závod se stejným ID už existuje, data se přepíší aktuálním sdíleným stavem.
+
+**Omezení:**
+
+* U velmi rozsáhlých závodů může být odkaz příliš dlouhý pro QR kód – vždy funguje zkopírování odkazu (např. přes messenger).
+* Data zůstávají jen v prohlížeči příjemce – žádný server je neukládá.
+* Technicky: [`static/js/share.js`](static/js/share.js), knihovny LZ-String a [qrcodejs](https://github.com/davidshimjs/qrcodejs) z CDN.
+
+---
+
 ## Jak to funguje
 
 ### 1. Modelování terénu (ekvivalentní vzdálenost)

@@ -13,6 +13,32 @@
 
 @media (max-width: 600px) {
 
+    /* --- Horní lišta aplikace --- */
+    header,
+    .app-header {
+        padding: 0.65rem 0.75rem;
+        gap: 6px;
+    }
+
+    header h1,
+    .app-title {
+        font-size: 1.15rem;
+        gap: 6px;
+    }
+
+    .app-logo {
+        height: 26px;
+        width: 26px;
+    }
+
+    .header-theme-label {
+        display: none;
+    }
+
+    #themeToggle {
+        font-size: 1.25rem;
+    }
+
     /* --- Segment boxy: kompaktnější na mobilu --- */
     .segment-box {
         padding: 1rem;

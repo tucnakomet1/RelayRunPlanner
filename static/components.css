@@ -277,6 +277,50 @@
     margin-top: 0;
 }
 
+/* Sdílení stavu – QR kód a odkaz */
+.share-modal-content {
+    max-width: 420px;
+}
+
+.share-qrcode-wrap {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 220px;
+    margin: 0 auto 1rem;
+    padding: 12px;
+    background: #fff;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+}
+
+.share-qrcode-wrap img,
+.share-qrcode-wrap canvas {
+    display: block;
+}
+
+.share-link-meta {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+.share-link-input {
+    width: 100%;
+    font-size: 0.75rem;
+    font-family: monospace;
+    word-break: break-all;
+}
+
+.share-qr-hint {
+    color: #b45309;
+    font-size: 0.85rem;
+    line-height: 1.45;
+    text-align: center;
+    margin: 0;
+}
+
 /* Editace běžce v modálu */
 .edit-runner-item {
     background: rgba(0, 0, 0, 0.02);

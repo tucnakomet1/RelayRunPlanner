@@ -10,6 +10,8 @@
 
     <!-- Externí CDN knihovny pro výpočty -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.8.0/suncalc.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script>
         var module = { exports: {} };
         var exports = module.exports;
@@ -33,14 +35,13 @@
     <!-- ============================================
          HLAVIČKA – název aplikace + přepínač motivu
          ============================================ -->
-    <header>
-        <h1 style="display: flex; align-items: center; gap: 10px; cursor: pointer;" onclick="window.location.hash=''">
-            <img src="static/img/icon/RelayRunPlanner_150.png" alt="RelayRunPlanner logo"
-                style="height: 32px; width: 32px; object-fit: contain;">
-            RelayRunPlanner
+    <header class="app-header">
+        <h1 class="app-title" onclick="window.location.hash=''">
+            <img src="static/img/icon/RelayRunPlanner_150.png" alt="RelayRunPlanner logo" class="app-logo">
+            <span class="app-title-text">RelayRunPlanner</span>
         </h1>
-        <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-weight: 600; font-size: 0.9rem; color: var(--text-muted);">Motiv</span>
+        <div class="header-theme">
+            <span class="header-theme-label">Motiv</span>
             <button id="themeToggle" title="Přepnout motiv">🌓</button>
         </div>
     </header>
@@ -166,6 +167,8 @@
                         <button class="btn btn-outline" style="padding: 0.5rem 1rem; width: auto; font-size: 0.9rem;"
                             onclick="openSidebar()">🏃 Běžci</button>
                         <button class="btn btn-outline" style="padding: 0.5rem 1rem; width: auto; font-size: 0.9rem;"
+                            onclick="openShareModal()" title="Sdílet reálné časy a stav úseků">🔗 Sdílet stav</button>
+                        <button class="btn btn-outline" style="padding: 0.5rem 1rem; width: auto; font-size: 0.9rem;"
                             onclick="openSettingsModal()">⚙️</button>
                     </div>
                 </div>
@@ -198,6 +201,35 @@
                 </p>
                 <button type="button" onclick="window.location.hash=''" class="btn btn-outline"
                     style="width: auto;">Vytvořit nový závod</button>
+            </div>
+
+            <!-- MODAL: Sdílení stavu závodu -->
+            <div id="shareModal" class="modal">
+                <div class="modal-content card-settings share-modal-content">
+                    <div class="modal-header">
+                        <h3>Sdílet stav závodu</h3>
+                        <span class="close" onclick="closeShareModal()">&times;</span>
+                    </div>
+                    <div class="modal-body">
+                        <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1rem;">
+                            Odkaz obsahuje kompletní stav závodu včetně reálných časů doběhů. Druhý uživatel ho
+                            otevře nebo naskenuje QR kód – data se uloží do jeho prohlížeče (localStorage).
+                        </p>
+                        <div id="share-qrcode" class="share-qrcode-wrap"></div>
+                        <p id="share-link-meta" class="share-link-meta"></p>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label>Odkaz ke sdílení</label>
+                            <input type="text" id="share-link-input" readonly class="share-link-input"
+                                onclick="this.select()">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;"
+                            onclick="closeShareModal()">Zavřít</button>
+                        <button class="btn btn-primary" style="width: auto; padding: 0.5rem 1rem; margin-left: 10px;"
+                            onclick="copyShareLink()">📋 Zkopírovat odkaz</button>
+                    </div>
+                </div>
             </div>
 
             <!-- MODAL: Nastavení závodu -->
@@ -413,6 +445,7 @@
     <script src="static/js/sidebar.js"></script>
     <script src="static/js/generator.js"></script>
     <script src="static/js/logistics.js"></script>
+    <script src="static/js/share.js"></script>
     <script src="static/js/router.js"></script>
 </body>
 

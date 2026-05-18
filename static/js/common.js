@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Zavření modálů při kliknutí mimo obsah
     window.addEventListener('click', (event) => {
-        const modals = ['settingsModal', 'logisticsModal', 'analysisModal', 'smartGenModal'];
+        const modals = ['settingsModal', 'logisticsModal', 'analysisModal', 'smartGenModal', 'shareModal'];
         modals.forEach(id => {
             const modal = document.getElementById(id);
             if (event.target === modal) {

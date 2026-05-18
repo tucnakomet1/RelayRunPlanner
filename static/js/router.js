@@ -179,6 +179,7 @@ function handleRouting() {
     if (typeof closeLogisticsModal === 'function') closeLogisticsModal();
     if (typeof closeAnalysisModal === 'function') closeAnalysisModal();
     if (typeof closeSmartGenModal === 'function') closeSmartGenModal();
+    if (typeof closeShareModal === 'function') closeShareModal();
 
     const raceMatch = hash.match(/^#race\/([a-zA-Z0-9-]+)$/);
 
@@ -289,8 +290,13 @@ function handleRouting() {
     }
 }
 
-// Spustit směrování při načtení a při každé změně hashe
-window.addEventListener('hashchange', handleRouting);
-document.addEventListener('DOMContentLoaded', () => {
+/** Spustí router; nejdříve zpracuje import ze sdíleného odkazu #race_data=… */
+function runRouter() {
+    if (typeof processShareHashIfPresent === 'function' && processShareHashIfPresent()) {
+        // hash byl nahrazen na #race/<id>, pokračovat normálním směrováním
+    }
     handleRouting();
-});
+}
+
+window.addEventListener('hashchange', runRouter);
+document.addEventListener('DOMContentLoaded', runRouter);
