@@ -39,7 +39,7 @@ Aplikace byla vytvořena k plánování štafetového závodu s 5 až 12 běžci
 * **Dynamická predikce časů:** Výpočet očekávaného času na základě délky, stoupání a individuálního tempa z kontrolního běhu (koeficient: 100 m převýšení = 1 km roviny).
 * **Automatická detekce nočních úseků:** Výpočet času východu a západu slunce pro dané datum a souřadnice (knihovna [SunCalc](https://github.com/mourner/suncalc) z CDN), úseky vyžadující čelovku jsou označeny (tolerance 30 minut).
 * **Sledování průběhu závodu:** Odškrtávání hotových úseků a zadávání reálných časů; aplikace přepočítá predikované starty a doběhy zbývajících úseků.
-* **Bezserverové sdílení stavu:** Aktuální průběh závodu (reálné časy doběhů, přiřazení běžců) lze poslat odkazem nebo QR kódem – druhý uživatel si ho importuje do svého prohlížeče (localStorage), bez backendu.
+* **Bezserverové sdílení:** Celý závod („Sdílet závod“) nebo jen průběh („Synchronizace“) přes odkaz / QR kód do localStorage druhého zařízení – bez backendu.
 * **Offline-first:** Po načtení stránky funguje bez serveru; závody přežijí obnovení prohlížeče díky localStorage.
 * **Předvyplněné trasy:** Šablony pro JizeRun (15 úseků), 250ČR (24) a Vltava Run (36) jsou součástí aplikace.
 
@@ -148,21 +148,19 @@ Tlačítko **„Logistika“** v záhlaví:
 
 Výsledek logistiky se ukládá k závodu v localStorage.
 
-#### D. Sdílení stavu závodu
+#### D. Sdílení a synchronizace
 
-Na dashboardu závodu (krok 3) tlačítko **„🔗 Sdílet stav“** v záhlaví:
+Na dashboardu (krok 3) tlačítko **„🔗 Sdílet“** otevře modal se dvěma režimy:
 
-1. Aplikace uloží aktuální závod z localStorage (včetně označených úseků **Hotovo** a zadaných reálných časů).
-2. Stav se zkomprimuje ([LZ-String](https://pieroxy.net/blog/pages/lz-string/index.html)) a vloží do URL za hashtag: `index.html#race_data=…`
-3. V modalu se zobrazí **QR kód** odkazu a pole pro **zkopírování** – druhý člen týmu ho otevře na telefonu nebo naskenuje QR.
+**📋 Sdílet závod** – pro nové zařízení nebo člena týmu, který závod ještě nemá. Odkaz obsahuje celý závod: úseky, běžce, logistiku i aktuální časy doběhů. Po otevření se vše uloží do localStorage.
 
-**Import na druhém zařízení:** Po otevření odkazu se závod automaticky uloží do localStorage a zobrazí se dashboard. Pokud závod se stejným ID už existuje, data se přepíší aktuálním sdíleným stavem.
+**🔄 Synchronizace** – pro aktualizaci průběhu, když už oba mají stejný závod (stejné ID). Odesílá se jen kompaktní stav úseků: číslo úseku, hotovo/ne, reálný čas. Odkaz je výrazně kratší a lépe se vejde do QR kódu.
 
-**Omezení:**
+Obě varianty používají kompresi [LZ-String](https://pieroxy.net/blog/pages/lz-string/index.html) v URL: `index.html#race_data=…`
 
-* U velmi rozsáhlých závodů může být odkaz příliš dlouhý pro QR kód – vždy funguje zkopírování odkazu (např. přes messenger).
-* Data zůstávají jen v prohlížeči příjemce – žádný server je neukládá.
-* Technicky: [`static/js/share.js`](static/js/share.js), knihovny LZ-String a [qrcodejs](https://github.com/davidshimjs/qrcodejs) z CDN.
+**Doporučený postup:** nejdříve „Sdílet závod“ na všech zařízeních, během závodu pak opakovaně „Synchronizace“.
+
+**Omezení:** u velmi velkého závodu může být odkaz „Sdílet závod“ příliš dlouhý pro QR – vždy funguje zkopírování. Synchronizace je pro typický závod do QR většinou v pohodě.
 
 ---
 

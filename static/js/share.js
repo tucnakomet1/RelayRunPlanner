@@ -1,14 +1,15 @@
 /**
- * share.js – Bezserverové sdílení stavu závodu přes URL hash a QR kód
+ * share.js – Bezserverové sdílení závodu a synchronizace průběhu přes URL hash
  *
- * Formát odkazu: index.html#race_data=<LZ-compressed payload>
- * Payload obsahuje kompletní závod včetně reálných časů doběhů pro import do localStorage.
+ * Formáty odkazu: index.html#race_data=<LZ-compressed payload>
+ *   • t: "full"  – celý závod (úseky, běžci, logistika, časy)
+ *   • t: "sync"  – jen průběh (hotovo + reálný čas), stejné ID závodu u příjemce
  */
 
-const SHARE_FORMAT_VERSION = 1;
+const SHARE_FORMAT_VERSION = 2;
 
-/** Sestaví objekt závodu připravený ke sdílení z aktuálního stavu */
-function buildShareableRaceSnapshot() {
+/** Uloží aktuální závod z paměti do localStorage a vrátí jeho kopii */
+function getCurrentRaceFromStorage() {
     if (!window.RACE_ID) return null;
 
     if (typeof saveCurrentRaceToLocalStorage === 'function') {
@@ -19,29 +20,48 @@ function buildShareableRaceSnapshot() {
     const race = races[window.RACE_ID];
     if (!race) return null;
 
+    return JSON.parse(JSON.stringify(race));
+}
+
+/** Kompletní závod ke sdílení novému zařízení */
+function buildFullRaceSnapshot(race) {
     return {
         id: race.id,
         name: race.name,
         start_time: race.start_time,
         segment_count: race.segment_count,
-        segments: JSON.parse(JSON.stringify(race.segments || [])),
-        runners: JSON.parse(JSON.stringify(race.runners || [])),
-        logistics: race.logistics ? JSON.parse(JSON.stringify(race.logistics)) : null,
+        segments: race.segments || [],
+        runners: race.runners || [],
+        logistics: race.logistics || null,
         last_generation_method: race.last_generation_method || null
     };
 }
 
-/** Zakóduje závod do řetězce vhodného pro URL hash */
-function encodeRaceForShare(race) {
+/** Kompaktní průběh – předpokládá stejný závod u příjemce */
+function buildSyncSnapshot(race) {
+    return {
+        v: SHARE_FORMAT_VERSION,
+        t: 'sync',
+        id: race.id,
+        n: race.name,
+        p: (race.segments || []).map(s => [
+            s.id,
+            s.is_done ? 1 : 0,
+            s.actual_time || ''
+        ])
+    };
+}
+
+/** Zakóduje payload do URL hash parametru */
+function encodeSharePayload(payload) {
     if (typeof LZString === 'undefined') {
         throw new Error('Chybí knihovna LZ-String pro kompresi odkazu.');
     }
-    const payload = { v: SHARE_FORMAT_VERSION, race };
     return LZString.compressToEncodedURIComponent(JSON.stringify(payload));
 }
 
-/** Dekóduje payload z hash parametru race_data */
-function decodeRaceFromShare(encoded) {
+/** Dekóduje a rozpozná typ sdílení */
+function decodeSharePayload(encoded) {
     if (typeof LZString === 'undefined') {
         throw new Error('Chybí knihovna LZ-String.');
     }
@@ -50,16 +70,30 @@ function decodeRaceFromShare(encoded) {
         throw new Error('Neplatná nebo poškozená data v odkazu.');
     }
     const payload = JSON.parse(json);
-    if (!payload || payload.v !== SHARE_FORMAT_VERSION || !payload.race || !payload.race.id) {
+
+    // starší formát v1: { v: 1, race }
+    if (payload && payload.v === 1 && payload.race && payload.race.id) {
+        return { type: 'full', race: payload.race };
+    }
+
+    if (!payload || payload.v !== SHARE_FORMAT_VERSION) {
         throw new Error('Nepodporovaný formát sdílených dat.');
     }
-    return payload.race;
+
+    if (payload.t === 'sync') {
+        if (!payload.id || !Array.isArray(payload.p)) {
+            throw new Error('Neplatná synchronizační zpráva.');
+        }
+        return { type: 'sync', sync: payload };
+    }
+
+    if (payload.t === 'full' && payload.race && payload.race.id) {
+        return { type: 'full', race: payload.race };
+    }
+
+    throw new Error('Nepodporovaný typ sdílení.');
 }
 
-/**
- * Základní URL dokumentu bez hashe.
- * U file:// je location.origin řetězec "null" – proto sestavujeme z href.
- */
 function getDocumentBaseUrl() {
     const { protocol, host, pathname, search, href } = window.location;
     if (protocol === 'http:' || protocol === 'https:') {
@@ -68,12 +102,10 @@ function getDocumentBaseUrl() {
     return href.split('#')[0];
 }
 
-/** Vrátí absolutní URL stránky se zakódovaným stavem v hash */
 function buildShareUrl(encodedPayload) {
     return `${getDocumentBaseUrl()}#race_data=${encodedPayload}`;
 }
 
-/** Uloží nebo aktualizuje závod z odkazu v localStorage */
 function importSharedRace(sharedRace) {
     const races = getRacesFromLocalStorage();
     const existing = races[sharedRace.id];
@@ -95,7 +127,40 @@ function importSharedRace(sharedRace) {
     return sharedRace.id;
 }
 
-/** Zpracuje #race_data=… při načtení nebo změně hash; vrátí true pokud hash zpracován */
+/** Sloučí průběh do existujícího závodu se stejným ID */
+function importSyncPayload(sync) {
+    const races = getRacesFromLocalStorage();
+    const existing = races[sync.id];
+
+    if (!existing || !existing.segments) {
+        throw new Error(
+            'Závod v tomto prohlížeči neexistuje. Nejdříve načtěte odkaz „Sdílet závod“, pak používejte synchronizaci.'
+        );
+    }
+
+    const byId = {};
+    existing.segments.forEach(s => {
+        byId[s.id] = s;
+    });
+
+    let updated = 0;
+    sync.p.forEach(([segId, done, time]) => {
+        const seg = byId[segId];
+        if (seg) {
+            seg.is_done = !!done;
+            seg.actual_time = time || '';
+            updated++;
+        }
+    });
+
+    if (updated === 0) {
+        throw new Error('Žádný úsek se nepodařilo spárovat – zkontrolujte, že máte stejný závod.');
+    }
+
+    saveRacesToLocalStorage(races);
+    return { raceId: sync.id, name: sync.n || existing.name, updated };
+}
+
 function processShareHashIfPresent() {
     const hash = window.location.hash || '';
     if (!hash.startsWith('#race_data=')) {
@@ -108,24 +173,40 @@ function processShareHashIfPresent() {
     }
 
     try {
-        const sharedRace = decodeRaceFromShare(encoded);
-        const raceId = importSharedRace(sharedRace);
+        const decoded = decodeSharePayload(encoded);
+        let raceId;
+        let alertMsg;
+
+        if (decoded.type === 'sync') {
+            const result = importSyncPayload(decoded.sync);
+            raceId = result.raceId;
+            const doneCount = decoded.sync.p.filter(row => row[1]).length;
+            alertMsg = `Synchronizace „${result.name}“ dokončena (${doneCount} doběhnutých úseků).`;
+        } else {
+            raceId = importSharedRace(decoded.race);
+            const doneCount = (decoded.race.segments || []).filter(s => s.is_done).length;
+            alertMsg = `Závod „${decoded.race.name}“ byl importován (${doneCount} doběhnutých úseků).`;
+        }
+
         const cleanUrl = `${getDocumentBaseUrl()}#race/${raceId}`;
         history.replaceState(null, '', cleanUrl);
-        const doneCount = (sharedRace.segments || []).filter(s => s.is_done).length;
-        setTimeout(() => {
-            alert(`Stav závodu „${sharedRace.name}“ byl importován (${doneCount} doběhnutých úseků).`);
-        }, 100);
+        setTimeout(() => alert(alertMsg), 100);
         return true;
     } catch (err) {
         console.error('Import sdíleného stavu:', err);
-        alert('Nepodařilo se načíst sdílený stav závodu:\n' + err.message);
+        alert('Nepodařilo se načíst sdílená data:\n' + err.message);
         history.replaceState(null, '', getDocumentBaseUrl());
         return true;
     }
 }
 
-/** Vykreslí QR kód odkazu do kontejneru */
+let _activeShareMode = 'full';
+
+const SHARE_MODE_DESCRIPTIONS = {
+    full: 'Kompletní závod pro nové zařízení: úseky, běžci, logistika i aktuální časy. Příjemce nemusí mít závod uložený.',
+    sync: 'Jen průběh závodu (Hotovo + reálný čas). Příjemce musí mít stejný závod – nejdříve sdílejte odkaz „Sdílet závod“.'
+};
+
 function renderShareQrCode(url) {
     const container = document.getElementById('share-qrcode');
     if (!container) return;
@@ -143,12 +224,13 @@ function renderShareQrCode(url) {
     }
 
     if (window.location.protocol === 'file:') {
-        container.innerHTML = '<p class="share-qr-hint">Stránku máte otevřenou jako soubor (file://). Pro sdílení na telefon spusťte aplikaci přes HTTP server nebo GitHub Pages – pak bude fungovat i QR kód. Odkaz níže lze zkopírovat pro test na tomto počítači.</p>';
+        container.innerHTML = '<p class="share-qr-hint">Stránku máte otevřenou jako soubor (file://). Pro sdílení na telefon spusťte aplikaci přes HTTP server nebo GitHub Pages. Odkaz níže lze zkopírovat pro test na tomto počítači.</p>';
         return;
     }
 
-    if (url.length > 2400) {
-        container.innerHTML = '<p class="share-qr-hint">Odkaz je příliš dlouhý pro QR kód (velký závod). Použijte tlačítko „Zkopírovat odkaz“ a pošlete ho např. přes messenger.</p>';
+    const qrLimit = _activeShareMode === 'sync' ? 2800 : 2400;
+    if (url.length > qrLimit) {
+        container.innerHTML = '<p class="share-qr-hint">Odkaz je příliš dlouhý pro QR kód. Použijte „Zkopírovat odkaz“ a pošlete ho např. přes messenger.</p>';
         return;
     }
 
@@ -167,21 +249,42 @@ function renderShareQrCode(url) {
     }
 }
 
-function openShareModal() {
-    if (!window.RACE_ID) {
-        alert('Nejdříve otevřete uložený závod.');
+function updateShareModeTabs() {
+    document.querySelectorAll('.share-mode-tab').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.mode === _activeShareMode);
+    });
+    const desc = document.getElementById('share-mode-desc');
+    if (desc) {
+        desc.textContent = SHARE_MODE_DESCRIPTIONS[_activeShareMode];
+    }
+}
+
+/** Vygeneruje odkaz pro zvolený režim a aktualizuje modal */
+function renderShareForMode(mode) {
+    _activeShareMode = mode;
+    const race = getCurrentRaceFromStorage();
+    if (!race) {
+        alert('Stav závodu se nepodařilo načíst.');
         return;
     }
 
-    const race = buildShareableRaceSnapshot();
-    if (!race) {
-        alert('Stav závodu se nepodařilo připravit ke sdílení.');
-        return;
+    let payload;
+    let metaText;
+
+    if (mode === 'sync') {
+        payload = buildSyncSnapshot(race);
+        const doneCount = payload.p.filter(row => row[1]).length;
+        metaText = `Synchronizace · ${race.name} · ${doneCount}/${payload.p.length} doběhnuto`;
+    } else {
+        const snap = buildFullRaceSnapshot(race);
+        payload = { v: SHARE_FORMAT_VERSION, t: 'full', race: snap };
+        const doneCount = (snap.segments || []).filter(s => s.is_done).length;
+        metaText = `Celý závod · ${race.name} · ${doneCount}/${snap.segments.length} doběhnuto`;
     }
 
     let encoded;
     try {
-        encoded = encodeRaceForShare(race);
+        encoded = encodeSharePayload(payload);
     } catch (err) {
         alert(err.message);
         return;
@@ -191,20 +294,31 @@ function openShareModal() {
     const linkInput = document.getElementById('share-link-input');
     const meta = document.getElementById('share-link-meta');
 
-    if (linkInput) {
-        linkInput.value = shareUrl;
-    }
+    if (linkInput) linkInput.value = shareUrl;
     if (meta) {
-        const doneCount = (race.segments || []).filter(s => s.is_done).length;
-        meta.textContent = `${race.name} · ${doneCount}/${race.segments.length} doběhnutých úseků · délka odkazu ${shareUrl.length} znaků`;
+        meta.textContent = `${metaText} · délka odkazu ${shareUrl.length} znaků`;
     }
 
+    updateShareModeTabs();
     renderShareQrCode(shareUrl);
+}
+
+function selectShareMode(mode) {
+    if (mode !== 'full' && mode !== 'sync') return;
+    renderShareForMode(mode);
+}
+
+function openShareModal() {
+    if (!window.RACE_ID) {
+        alert('Nejdříve otevřete uložený závod.');
+        return;
+    }
 
     const modal = document.getElementById('shareModal');
     if (modal) {
         modal.style.display = 'block';
     }
+    renderShareForMode('full');
 }
 
 function closeShareModal() {

@@ -167,7 +167,7 @@
                         <button class="btn btn-outline" style="padding: 0.5rem 1rem; width: auto; font-size: 0.9rem;"
                             onclick="openSidebar()">🏃 Běžci</button>
                         <button class="btn btn-outline" style="padding: 0.5rem 1rem; width: auto; font-size: 0.9rem;"
-                            onclick="openShareModal()" title="Sdílet reálné časy a stav úseků">🔗 Sdílet stav</button>
+                            onclick="openShareModal()" title="Sdílet závod nebo synchronizovat průběh">🔗 Sdílet</button>
                         <button class="btn btn-outline" style="padding: 0.5rem 1rem; width: auto; font-size: 0.9rem;"
                             onclick="openSettingsModal()">⚙️</button>
                     </div>
@@ -207,14 +207,17 @@
             <div id="shareModal" class="modal">
                 <div class="modal-content card-settings share-modal-content">
                     <div class="modal-header">
-                        <h3>Sdílet stav závodu</h3>
+                        <h3>Sdílení</h3>
                         <span class="close" onclick="closeShareModal()">&times;</span>
                     </div>
                     <div class="modal-body">
-                        <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1rem;">
-                            Odkaz obsahuje kompletní stav závodu včetně reálných časů doběhů. Druhý uživatel ho
-                            otevře nebo naskenuje QR kód – data se uloží do jeho prohlížeče (localStorage).
-                        </p>
+                        <div class="share-mode-tabs">
+                            <button type="button" class="share-mode-tab active" data-mode="full"
+                                onclick="selectShareMode('full')">📋 Sdílet závod</button>
+                            <button type="button" class="share-mode-tab" data-mode="sync"
+                                onclick="selectShareMode('sync')">🔄 Synchronizace</button>
+                        </div>
+                        <p id="share-mode-desc" class="share-mode-desc"></p>
                         <div id="share-qrcode" class="share-qrcode-wrap"></div>
                         <p id="share-link-meta" class="share-link-meta"></p>
                         <div class="form-group" style="margin-bottom: 0;">
